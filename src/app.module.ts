@@ -6,6 +6,7 @@ import { RedisModule } from './redis/redis.module';
 import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
 import { envSchema } from './config/env.schema';
+import { RepositoriesModule } from './repositories/repositories.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { envSchema } from './config/env.schema';
       validate: (env) => envSchema.parse(env),
     }),
     PrismaModule,
+    RepositoriesModule,
     RedisModule,
   ],
   controllers: [AppController],
