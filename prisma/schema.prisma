@@ -1,0 +1,90 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+  seed          = "ts-node prisma/seed.ts"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id       String @id @default(uuid())
+  email    String @unique
+  password String
+
+  isEmailVerified Boolean @default(false)
+  is2FAEnabled    Boolean @default(false)
+  twoFASecret     String? // encrypted
+
+  tokenVersion Int @default(0) // 🔥 global revoke
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  devices Device[]
+  ApiKey  ApiKey[]
+
+  @@index([email])
+}
+
+model Device {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  userAgent   String?
+  ipAddress   String?
+  fingerprint String?
+
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @updatedAt
+
+  isRevoked Boolean @default(false)
+
+  @@index([userId])
+}
+
+model ApiKey {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  keyHash String // NEVER store raw key
+  name    String?
+
+  scopes String[] // ["read", "write", "payment"]
+
+  isActive Boolean @default(true)
+
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@index([userId])
+}
+
+model AuthLog {
+  id     String  @id @default(uuid())
+  userId String?
+  event  String // LOGIN_SUCCESS, LOGIN_FAIL, TOKEN_REFRESH, LOGOUT
+
+  ip        String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model LoginAttempt {
+  id      String  @id @default(uuid())
+  email   String
+  ip      String
+  success Boolean
+
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([ip])
+}
