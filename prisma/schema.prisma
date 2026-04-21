@@ -1,3 +1,4 @@
+// schema.prisma
 generator client {
   provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
@@ -9,82 +10,398 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ------------------------------
+// Enums
+// ------------------------------
+enum RoleName {
+  ADMIN
+  USER
+  MERCHANT
+}
+
+enum ApiKeyScope {
+  READ
+  WRITE
+  PAYMENT
+  ADMIN
+}
+
+enum AuditAction {
+  LOGIN_SUCCESS
+  LOGIN_FAILURE
+  LOGOUT
+  TOKEN_REFRESH
+  TOKEN_REUSE_DETECTED
+  TOKEN_REVOKED
+  PASSWORD_CHANGE
+  TWO_FACTOR_ENABLE
+  TWO_FACTOR_DISABLE
+  TWO_FACTOR_VERIFY
+  BACKUP_CODES_GENERATED
+  BACKUP_CODE_USED
+  ADMIN_ACTION
+  SUSPICIOUS_ACTIVITY
+  API_KEY_CREATE
+  API_KEY_REVOKE
+  WEBHOOK_SENT
+  SESSION_REVOKE
+  FORCE_LOGOUT_ALL
+  ACCOUNT_LOCKED
+  ACCOUNT_UNLOCKED
+  DEVICE_TRUSTED
+  DEVICE_BLOCKED
+}
+
+enum DeviceRiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  BLOCKED
+}
+
+// ------------------------------
+// RBAC Models (Many-to-Many)
+// ------------------------------
+model Role {
+  id          String           @id @default(cuid())
+  name        RoleName         @unique
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  name        String           @unique // e.g., "user:read", "payment:create"
+  description String?
+  resource    String // e.g., "user", "payment", "admin"
+  action      String // e.g., "create", "read", "update", "delete"
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  assignedAt   DateTime   @default(now())
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId     String
+  roleId     String
+  assignedAt DateTime @default(now())
+  assignedBy String? // admin user ID
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+// ------------------------------
+// Core User Model
+// ------------------------------
 model User {
-  id       String @id @default(uuid())
-  email    String @unique
-  password String
+  id                   String                @id @default(cuid())
+  email                String                @unique
+  emailVerified        Boolean               @default(false)
+  passwordHash         String // bcrypt/argon2 hash
+  fullName             String?
+  avatarUrl            String?
+  // 2FA
+  totpSecret           String? // encrypted TOTP secret
+  totpEnabled          Boolean               @default(false)
+  // Security & Lockout
+  failedLoginAttempts  Int                   @default(0)
+  lockUntil            DateTime? // account locked until this time
+  lastLoginAt          DateTime?
+  lastLoginIP          String?
+  // Session invalidation on password change
+  tokenVersion         Int                   @default(0)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  // Relations
+  roles                UserRole[]
+  sessions             Session[]
+  devices              Device[]
+  apiKeys              ApiKey[]
+  auditLogs            AuditLog[]
+  loginAttempts        LoginAttempt[]
+  backupCodes          BackupCode[]
+  idempotencyKeys      IdempotencyKey[]
+  webhookSubscriptions WebhookSubscription[]
 
-  isEmailVerified Boolean @default(false)
-  is2FAEnabled    Boolean @default(false)
-  twoFASecret     String? // encrypted
+  @@index([email])
+  @@index([lockUntil])
+  @@map("users")
+}
 
-  tokenVersion Int @default(0) // 🔥 global revoke
+// ------------------------------
+// Session & Refresh Token (with rotation chain)
+// ------------------------------
+model Session {
+  id            String         @id @default(cuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId      String? // link to device fingerprint
+  device        Device?        @relation(fields: [deviceId], references: [id])
+  ipAddress     String?
+  userAgent     String?
+  country       String?
+  city          String?
+  lat           Float?
+  lon           Float?
+  lastUsedAt    DateTime       @updatedAt
+  expiresAt     DateTime // absolute session lifetime cap
+  isRevoked     Boolean        @default(false)
+  revokedReason String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  refreshTokens RefreshToken[]
 
+  @@index([userId])
+  @@index([isRevoked])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model RefreshToken {
+  id            String         @id @default(cuid())
+  sessionId     String
+  session       Session        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  tokenHash     String         @unique // hashed refresh token
+  jti           String         @unique // JWT ID for audit
+  expiresAt     DateTime
+  revokedAt     DateTime? // if revoked manually or by rotation
+  createdAt     DateTime       @default(now()) // Chain tracking for rotation and reuse detection
+  parentTokenId String?
+  parentToken   RefreshToken?  @relation("TokenChain", fields: [parentTokenId], references: [id])
+  children      RefreshToken[] @relation("TokenChain")
+
+  @@index([parentTokenId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@index([sessionId, revokedAt])
+  @@map("refresh_tokens")
+}
+
+// ------------------------------
+// Device Fingerprinting & Risk
+// ------------------------------
+model Device {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fingerprint String // hash of device attributes (canvas, WebGL, etc.)
+  userAgent   String?
+  ipAddress   String?
+  country     String?
+  city        String?
+  lat         Float?
+  lon         Float?
+  firstSeenAt DateTime        @default(now())
+  lastSeenAt  DateTime        @updatedAt
+  riskLevel   DeviceRiskLevel @default(LOW)
+  trusted     Boolean         @default(false)
+  blocked     Boolean         @default(false)
+  metadata    Json? // additional fingerprint data
+  sessions    Session[]
+  auditLogs   AuditLog[]
+
+  @@unique([userId, fingerprint]) // ✅ Corrected: uniqueness per user
+  @@index([userId])
+  @@index([fingerprint]) // Index for fast lookup by fingerprint
+  @@map("devices")
+}
+
+// ------------------------------
+// API Keys (for Merchants / External Clients)
+// ------------------------------
+model ApiKey {
+  id         String        @id @default(cuid())
+  userId     String
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String // e.g., "Merchant POS Key"
+  keyPrefix  String // first 8 chars for display
+  keyHash    String        @unique // hashed full key
+  scopes     ApiKeyScope[]
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([keyHash])
+  @@map("api_keys")
+}
+
+// ------------------------------
+// Webhook Subscriptions (HMAC signing)
+// ------------------------------
+model WebhookSubscription {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  url          String
+  secret       String // encrypted HMAC secret
+  events       String[] // e.g., ["payment.success", "payment.failed"]
+  enabled      Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lastSentAt   DateTime?
+  failureCount Int       @default(0)
+
+  @@index([userId])
+  @@map("webhook_subscriptions")
+}
+
+// ------------------------------
+// 2FA Backup Codes (One‑Time)
+// ------------------------------
+model BackupCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String // hashed backup code
+  usedAt    DateTime? // null if unused
+  createdAt DateTime  @default(now())
+
+  @@unique([userId, codeHash])
+  @@index([userId])
+  @@map("backup_codes")
+}
+
+// ------------------------------
+// Idempotency Keys (Authenticated Users)
+// ------------------------------
+model IdempotencyKey {
+  id        String   @id @default(cuid())
+  userId    String // non-null – this is for authenticated users only
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key       String // idempotency key from client
+  operation String // e.g., "payment_create"
+  response  Json // stored successful response
+  status    String   @default("pending") // pending, success, error
+  expiresAt DateTime // TTL (e.g., 24h)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, key]) // ✅ Works correctly with non-null userId
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+// ------------------------------
+// Idempotency Keys (Unauthenticated / Public)
+// ------------------------------
+model IdempotencyKeyAnon {
+  id        String   @id @default(cuid())
+  key       String   @unique // ✅ Global uniqueness for anonymous requests
+  operation String // e.g., "password_reset_initiate"
+  response  Json // stored successful response
+  status    String   @default("pending")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("idempotency_keys_anon")
+}
+
+// ------------------------------
+// Replay Attack Protection (Nonce)
+// ------------------------------
+model RequestNonce {
+  id        String   @id @default(cuid())
+  nonce     String   @unique
+  timestamp DateTime @default(now())
+  expiresAt DateTime // TTL (e.g., 5 minutes)
+
+  @@index([expiresAt])
+  @@map("request_nonces")
+}
+
+// ------------------------------
+// Audit & Security Logging
+// ------------------------------
+model AuditLog {
+  id        String      @id @default(cuid())
+  userId    String? // null for unauthenticated events
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    AuditAction
+  deviceId  String?
+  device    Device?     @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  ipAddress String?
+  userAgent String?
+  country   String?
+  city      String?
+  lat       Float?
+  lon       Float?
+  metadata  Json? // additional context
+  severity  String      @default("info") // info, warning, critical
+  timestamp DateTime    @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+// ------------------------------
+// Brute Force / Failed Login Tracking
+// ------------------------------
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String // identifier used (email)
+  ipAddress String
+  success   Boolean
+  userAgent String?
+  timestamp DateTime @default(now())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([email, timestamp])
+  @@index([ipAddress, timestamp])
+  @@index([success, timestamp])
+  @@map("login_attempts")
+}
+
+// ------------------------------
+// JWT Secret Versioning (Key Rotation)
+// ------------------------------
+model JwtSecretVersion {
+  id        String   @id @default(cuid())
+  version   Int      @unique
+  secret    String // ⚠️ Must be encrypted (not hashed) because the server needs the plain secret to sign tokens
+  active    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@map("jwt_secret_versions")
+}
+
+// ------------------------------
+// Rate Limiting Store (DB Fallback)
+// ------------------------------
+model RateLimitBucket {
+  id        String   @id @default(cuid())
+  key       String   @unique // e.g., "login:ip:192.168.1.1" or "user:123:api"
+  points    Int      @default(0)
+  expireAt  DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  devices Device[]
-  ApiKey  ApiKey[]
-
-  @@index([email])
-}
-
-model Device {
-  id     String @id @default(uuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  userAgent   String?
-  ipAddress   String?
-  fingerprint String?
-
-  createdAt  DateTime @default(now())
-  lastSeenAt DateTime @updatedAt
-
-  isRevoked Boolean @default(false)
-
-  @@index([userId])
-}
-
-model ApiKey {
-  id     String @id @default(uuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  keyHash String // NEVER store raw key
-  name    String?
-
-  scopes String[] // ["read", "write", "payment"]
-
-  isActive Boolean @default(true)
-
-  createdAt  DateTime  @default(now())
-  lastUsedAt DateTime?
-
-  @@index([userId])
-}
-
-model AuthLog {
-  id     String  @id @default(uuid())
-  userId String?
-  event  String // LOGIN_SUCCESS, LOGIN_FAIL, TOKEN_REFRESH, LOGOUT
-
-  ip        String?
-  userAgent String?
-
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-}
-
-model LoginAttempt {
-  id      String  @id @default(uuid())
-  email   String
-  ip      String
-  success Boolean
-
-  createdAt DateTime @default(now())
-
-  @@index([email])
-  @@index([ip])
+  @@index([key])
+  @@map("rate_limit_buckets")
 }
