@@ -4,6 +4,7 @@ import { UserRepository } from './user.repository';
 import { RepositoryRegistry } from './repository.registry';
 import { SessionRepository } from './session.repository';
 import { RefreshTokenRepository } from './refresh-token.repository';
+import { DeviceRepository } from './device.repository';
 
 @Global()
 @Module({
@@ -12,6 +13,7 @@ import { RefreshTokenRepository } from './refresh-token.repository';
     RepositoryRegistry,
     SessionRepository,
     RefreshTokenRepository,
+    DeviceRepository,
   ],
   exports: [RepositoryRegistry],
 })
