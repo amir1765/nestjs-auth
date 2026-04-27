@@ -170,6 +170,7 @@ model Session {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   refreshTokens RefreshToken[]
+  AuditLog      AuditLog[]
 
   @@index([userId])
   @@index([isRevoked])
@@ -282,6 +283,9 @@ model AuditLog {
   action    AuditAction
   deviceId  String?
   device    Device?     @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  sessionId String?
+  session   Session?    @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
   ipAddress String?
   userAgent String?
   country   String?
@@ -289,8 +293,8 @@ model AuditLog {
   lat       Float?
   lon       Float?
   metadata  Json? // additional context
-  severity  String      @default("info") // info, warning, critical
-  timestamp DateTime    @default(now())
+  severity  String   @default("info") // info, warning, critical
+  timestamp DateTime @default(now())
 
   @@index([userId])
   @@index([action])
