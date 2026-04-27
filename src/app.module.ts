@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { PrismaModule } from './prisma/prisma.module';
+import { PrismaModule } from './repositories/prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { ConfigModule } from '@nestjs/config';
-import configuration from './config/configuration';
-import { envSchema } from './config/env.schema';
+import configuration from './common/config/configuration';
+import { envSchema } from './common/config/env.schema';
 import { RepositoriesModule } from './repositories/repositories.module';
 
 @Module({

@@ -197,6 +197,52 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String // identifier used (email)
+  ipAddress String
+  success   Boolean
+  userAgent String?
+  timestamp DateTime @default(now())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([email, timestamp])
+  @@index([ipAddress, timestamp])
+  @@index([success, timestamp])
+  @@map("login_attempts")
+}
+
+// ------------------------------
+// JWT Secret Versioning (Key Rotation)
+// ------------------------------
+model JwtSecretVersion {
+  id        String   @id @default(cuid())
+  version   Int      @unique
+  secret    String // ⚠️ Must be encrypted (not hashed) because the server needs the plain secret to sign tokens
+  active    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@map("jwt_secret_versions")
+}
+
+// ------------------------------
+// 2FA Backup Codes (One‑Time)
+// ------------------------------
+model BackupCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String // hashed backup code
+  usedAt    DateTime? // null if unused
+  createdAt DateTime  @default(now())
+
+  @@unique([userId, codeHash])
+  @@index([userId])
+  @@map("backup_codes")
+}
+
 // ------------------------------
 // Device Fingerprinting & Risk
 // ------------------------------
@@ -224,6 +270,32 @@ model Device {
   @@index([userId])
   @@index([fingerprint]) // Index for fast lookup by fingerprint
   @@map("devices")
+}
+
+// ------------------------------
+// Audit & Security Logging
+// ------------------------------
+model AuditLog {
+  id        String      @id @default(cuid())
+  userId    String? // null for unauthenticated events
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    AuditAction
+  deviceId  String?
+  device    Device?     @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  ipAddress String?
+  userAgent String?
+  country   String?
+  city      String?
+  lat       Float?
+  lon       Float?
+  metadata  Json? // additional context
+  severity  String      @default("info") // info, warning, critical
+  timestamp DateTime    @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([timestamp])
+  @@map("audit_logs")
 }
 
 // ------------------------------
@@ -266,22 +338,6 @@ model WebhookSubscription {
 
   @@index([userId])
   @@map("webhook_subscriptions")
-}
-
-// ------------------------------
-// 2FA Backup Codes (One‑Time)
-// ------------------------------
-model BackupCode {
-  id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  codeHash  String // hashed backup code
-  usedAt    DateTime? // null if unused
-  createdAt DateTime  @default(now())
-
-  @@unique([userId, codeHash])
-  @@index([userId])
-  @@map("backup_codes")
 }
 
 // ------------------------------
@@ -330,65 +386,6 @@ model RequestNonce {
 
   @@index([expiresAt])
   @@map("request_nonces")
-}
-
-// ------------------------------
-// Audit & Security Logging
-// ------------------------------
-model AuditLog {
-  id        String      @id @default(cuid())
-  userId    String? // null for unauthenticated events
-  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
-  action    AuditAction
-  deviceId  String?
-  device    Device?     @relation(fields: [deviceId], references: [id], onDelete: SetNull)
-  ipAddress String?
-  userAgent String?
-  country   String?
-  city      String?
-  lat       Float?
-  lon       Float?
-  metadata  Json? // additional context
-  severity  String      @default("info") // info, warning, critical
-  timestamp DateTime    @default(now())
-
-  @@index([userId])
-  @@index([action])
-  @@index([timestamp])
-  @@map("audit_logs")
-}
-
-// ------------------------------
-// Brute Force / Failed Login Tracking
-// ------------------------------
-model LoginAttempt {
-  id        String   @id @default(cuid())
-  email     String // identifier used (email)
-  ipAddress String
-  success   Boolean
-  userAgent String?
-  timestamp DateTime @default(now())
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id])
-
-  @@index([email, timestamp])
-  @@index([ipAddress, timestamp])
-  @@index([success, timestamp])
-  @@map("login_attempts")
-}
-
-// ------------------------------
-// JWT Secret Versioning (Key Rotation)
-// ------------------------------
-model JwtSecretVersion {
-  id        String   @id @default(cuid())
-  version   Int      @unique
-  secret    String // ⚠️ Must be encrypted (not hashed) because the server needs the plain secret to sign tokens
-  active    Boolean  @default(false)
-  createdAt DateTime @default(now())
-  expiresAt DateTime
-
-  @@map("jwt_secret_versions")
 }
 
 // ------------------------------

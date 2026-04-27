@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, BackupCode } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from './prisma/prisma.service';
 
 @Injectable()
 export class BackupCodeRepository {

@@ -18,4 +18,5 @@ export const envSchema = z.object({
   SESSION_ABSOLUTE_TIMEOUT: z.string(),
 
   ENCRYPTION_KEY: z.string(),
+  CRYPTO_SECRET: z.string().length(64),
 });

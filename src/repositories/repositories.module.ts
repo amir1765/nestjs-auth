@@ -1,7 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { UserRepository } from './user.repository';
 
-import { RepositoryRegistry } from './repository.registry';
+import { RepositoryRegistry } from './prisma/repository.registry';
 import { SessionRepository } from './session.repository';
 import { RefreshTokenRepository } from './refresh-token.repository';
 import { DeviceRepository } from './device.repository';
