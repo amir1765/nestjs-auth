@@ -11,7 +11,7 @@ import { IdempotencyKeyAnonRepository } from '../idempotency-key-anon.repository
 import { JwtSecretVersionRepository } from '../jwt-secret-version.repository';
 import { LoginAttemptRepository } from '../login-attempt.repository';
 import { PermissionRepository } from '../permission.repository';
-import { RateLimitBucketRepository } from '../rate-limit-bucket.repository';
+//import { RateLimitBucketRepository } from '../rate-limit-bucket.repository';
 import { RoleRepository } from '../role.repository';
 import { RolePermissionRepository } from '../role-permission.repository';
 import { UserRoleRepository } from '../user-role.repository';
@@ -32,7 +32,7 @@ export class RepositoryRegistry {
     public readonly jwtSecretVersion: JwtSecretVersionRepository,
     public readonly loginAttempt: LoginAttemptRepository,
     public readonly permission: PermissionRepository,
-    public readonly rateLimitBucket: RateLimitBucketRepository,
+   // public readonly rateLimitBucket: RateLimitBucketRepository,
     public readonly role: RoleRepository,
     public readonly rolePermission: RolePermissionRepository,
     public readonly userRole: UserRoleRepository,

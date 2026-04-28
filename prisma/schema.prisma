@@ -392,17 +392,17 @@ model RequestNonce {
   @@map("request_nonces")
 }
 
-// ------------------------------
-// Rate Limiting Store (DB Fallback)
-// ------------------------------
-model RateLimitBucket {
-  id        String   @id @default(cuid())
-  key       String   @unique // e.g., "login:ip:192.168.1.1" or "user:123:api"
-  points    Int      @default(0)
-  expireAt  DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([key])
-  @@map("rate_limit_buckets")
-}
+// // ------------------------------
+// // Rate Limiting Store (DB Fallback)
+// // ------------------------------
+// model RateLimitBucket {
+//   id        String   @id @default(cuid())
+//   key       String   @unique // e.g., "login:ip:192.168.1.1" or "user:123:api"
+//   points    Int      @default(0)
+//   expireAt  DateTime
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+//
+//   @@index([key])
+//   @@map("rate_limit_buckets")
+// }

@@ -13,7 +13,7 @@ import { IdempotencyKeyAnonRepository } from './idempotency-key-anon.repository'
 import { JwtSecretVersionRepository } from './jwt-secret-version.repository';
 import { LoginAttemptRepository } from './login-attempt.repository';
 import { PermissionRepository } from './permission.repository';
-import { RateLimitBucketRepository } from './rate-limit-bucket.repository';
+// import { RateLimitBucketRepository } from './rate-limit-bucket.repository';
 import { RoleRepository } from './role.repository';
 import { RolePermissionRepository } from './role-permission.repository';
 import { UserRoleRepository } from './user-role.repository';
@@ -35,7 +35,7 @@ import { WebhookSubscriptionRepository } from './webhook-subscription.repository
     JwtSecretVersionRepository,
     LoginAttemptRepository,
     PermissionRepository,
-    RateLimitBucketRepository,
+    // RateLimitBucketRepository,
     RoleRepository,
     RolePermissionRepository,
     UserRoleRepository,

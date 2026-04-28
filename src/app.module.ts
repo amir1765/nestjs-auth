@@ -7,6 +7,10 @@ import { ConfigModule } from '@nestjs/config';
 import configuration from './common/config/configuration';
 import { envSchema } from './common/config/env.schema';
 import { RepositoriesModule } from './repositories/repositories.module';
+import { ThrottlerModule } from '@nestjs/throttler';
+import {AdvancedRateLimitGuard } from './guards/throttler.guard';
+import { APP_GUARD } from '@nestjs/core';
+import { RedisStorageModule,  } from './redis/redis-storage.module';
 
 @Module({
   imports: [
@@ -15,11 +19,26 @@ import { RepositoriesModule } from './repositories/repositories.module';
       load: [configuration],
       validate: (env) => envSchema.parse(env),
     }),
+    // SentryModule.forRoot(),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60,
+          limit: 10,
+        },
+      ],
+    }),
     PrismaModule,
     RepositoriesModule,
     RedisModule,
+    RedisStorageModule
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+  {
+    provide: APP_GUARD,
+    useClass: AdvancedRateLimitGuard,
+  },
+    AppService],
 })
 export class AppModule {}

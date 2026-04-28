@@ -5,7 +5,7 @@ import Redis from 'ioredis';
 @Injectable()
 export class RedisService implements OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
-  private client: Redis;
+  private readonly client: Redis;
 
   constructor(private config: ConfigService) {
     this.client = new Redis({
@@ -14,17 +14,9 @@ export class RedisService implements OnModuleDestroy {
       password: this.config.get<string>('redis.password'),
     });
 
-    this.client.on('connect', () => {
-      this.logger.log('✅ Redis connected');
-    });
-
-    this.client.on('error', (err) => {
-      this.logger.error('❌ Redis error', err);
-    });
-
-    this.client.on('close', () => {
-      this.logger.warn('🛑 Redis connection closed');
-    });
+    this.client.on('connect', () => this.logger.log('Redis connected'));
+    this.client.on('error', (err) => this.logger.error(err));
+    this.client.on('close', () => this.logger.warn('Redis closed'));
   }
 
   getClient(): Redis {
@@ -33,6 +25,4 @@ export class RedisService implements OnModuleDestroy {
 
   async onModuleDestroy() {
     await this.client.quit();
-    this.logger.warn('🛑 Redis client quit');
-  }
-}
+  }}
