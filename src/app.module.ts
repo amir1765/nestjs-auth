@@ -11,6 +11,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import {AdvancedRateLimitGuard } from './guards/throttler.guard';
 import { APP_GUARD } from '@nestjs/core';
 import { RedisStorageModule,  } from './redis/redis-storage.module';
+import { IdempotencyModule } from './common/idempotency/idempotency.module';
 
 @Module({
   imports: [
@@ -31,7 +32,8 @@ import { RedisStorageModule,  } from './redis/redis-storage.module';
     PrismaModule,
     RepositoriesModule,
     RedisModule,
-    RedisStorageModule
+    RedisStorageModule,
+    IdempotencyModule
   ],
   controllers: [AppController],
   providers: [
