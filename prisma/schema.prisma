@@ -369,7 +369,7 @@ model IdempotencyKey {
 model IdempotencyKeyAnon {
   id        String   @id @default(cuid())
   key       String   @unique // ✅ Global uniqueness for anonymous requests
-  operation String // e.g., "password_reset_initiate"
+  operation String
   response  Json // stored successful response
   status    String   @default("pending")
   expiresAt DateTime
