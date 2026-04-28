@@ -140,7 +140,7 @@ model User {
   auditLogs            AuditLog[]
   loginAttempts        LoginAttempt[]
   backupCodes          BackupCode[]
-  idempotencyKeys      IdempotencyKey[]
+  // idempotencyKeys      IdempotencyKey[]
   webhookSubscriptions WebhookSubscription[]
 
   @@index([email])
@@ -344,40 +344,40 @@ model WebhookSubscription {
   @@map("webhook_subscriptions")
 }
 
-// ------------------------------
-// Idempotency Keys (Authenticated Users)
-// ------------------------------
-model IdempotencyKey {
-  id        String   @id @default(cuid())
-  userId    String // non-null – this is for authenticated users only
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  key       String // idempotency key from client
-  operation String // e.g., "payment_create"
-  response  Json // stored successful response
-  status    String   @default("pending") // pending, success, error
-  expiresAt DateTime // TTL (e.g., 24h)
-  createdAt DateTime @default(now())
-
-  @@unique([userId, key]) // ✅ Works correctly with non-null userId
-  @@index([expiresAt])
-  @@map("idempotency_keys")
-}
-
-// ------------------------------
-// Idempotency Keys (Unauthenticated / Public)
-// ------------------------------
-model IdempotencyKeyAnon {
-  id        String   @id @default(cuid())
-  key       String   @unique // ✅ Global uniqueness for anonymous requests
-  operation String
-  response  Json // stored successful response
-  status    String   @default("pending")
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  @@index([expiresAt])
-  @@map("idempotency_keys_anon")
-}
+// // ------------------------------
+// // Idempotency Keys (Authenticated Users)
+// // ------------------------------
+// model IdempotencyKey {
+//   id        String   @id @default(cuid())
+//   userId    String // non-null – this is for authenticated users only
+//   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+//   key       String // idempotency key from client
+//   operation String // e.g., "payment_create"
+//   response  Json // stored successful response
+//   status    String   @default("pending") // pending, success, error
+//   expiresAt DateTime // TTL (e.g., 24h)
+//   createdAt DateTime @default(now())
+//
+//   @@unique([userId, key]) // ✅ Works correctly with non-null userId
+//   @@index([expiresAt])
+//   @@map("idempotency_keys")
+// }
+//
+// // ------------------------------
+// // Idempotency Keys (Unauthenticated / Public)
+// // ------------------------------
+// model IdempotencyKeyAnon {
+//   id        String   @id @default(cuid())
+//   key       String   @unique // ✅ Global uniqueness for anonymous requests
+//   operation String
+//   response  Json // stored successful response
+//   status    String   @default("pending")
+//   expiresAt DateTime
+//   createdAt DateTime @default(now())
+//
+//   @@index([expiresAt])
+//   @@map("idempotency_keys_anon")
+// }
 
 // ------------------------------
 // Replay Attack Protection (Nonce)
