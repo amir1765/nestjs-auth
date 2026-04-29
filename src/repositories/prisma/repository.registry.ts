@@ -6,8 +6,8 @@ import { DeviceRepository } from '../device.repository';
 import { ApiKeyRepository } from '../api-key.repository';
 import { AuditLogRepository } from '../audit-log.repository';
 import { BackupCodeRepository } from '../backup-code.repository';
-import { IdempotencyKeyRepository } from '../idempotency-key.repository';
-import { IdempotencyKeyAnonRepository } from '../idempotency-key-anon.repository';
+// import { IdempotencyKeyRepository } from '../idempotency-key.repository';
+// import { IdempotencyKeyAnonRepository } from '../idempotency-key-anon.repository';
 import { JwtSecretVersionRepository } from '../jwt-secret-version.repository';
 import { LoginAttemptRepository } from '../login-attempt.repository';
 import { PermissionRepository } from '../permission.repository';
@@ -27,8 +27,8 @@ export class RepositoryRegistry {
     public readonly apiKey: ApiKeyRepository,
     public readonly auditLog: AuditLogRepository,
     public readonly backupCode: BackupCodeRepository,
-    public readonly idempotencyKey: IdempotencyKeyRepository,
-    public readonly idempotencyKeyAnon: IdempotencyKeyAnonRepository,
+    // public readonly idempotencyKey: IdempotencyKeyRepository,
+    // public readonly idempotencyKeyAnon: IdempotencyKeyAnonRepository,
     public readonly jwtSecretVersion: JwtSecretVersionRepository,
     public readonly loginAttempt: LoginAttemptRepository,
     public readonly permission: PermissionRepository,

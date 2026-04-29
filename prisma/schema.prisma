@@ -345,7 +345,7 @@ model WebhookSubscription {
 }
 
 // // ------------------------------
-// // Idempotency Keys (Authenticated Users)
+// // Idempotency Keys (Authenticated Users) implanted in redis shit
 // // ------------------------------
 // model IdempotencyKey {
 //   id        String   @id @default(cuid())
@@ -364,7 +364,7 @@ model WebhookSubscription {
 // }
 //
 // // ------------------------------
-// // Idempotency Keys (Unauthenticated / Public)
+// // Idempotency Keys (Unauthenticated / Public) implanted in redis shit
 // // ------------------------------
 // model IdempotencyKeyAnon {
 //   id        String   @id @default(cuid())
@@ -393,7 +393,7 @@ model RequestNonce {
 }
 
 // // ------------------------------
-// // Rate Limiting Store (DB Fallback)
+// // Rate Limiting Store (DB Fallback) implanted in redis shit
 // // ------------------------------
 // model RateLimitBucket {
 //   id        String   @id @default(cuid())

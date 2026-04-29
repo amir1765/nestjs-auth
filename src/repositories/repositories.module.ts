@@ -8,12 +8,12 @@ import { DeviceRepository } from './device.repository';
 import { ApiKeyRepository } from './api-key.repository';
 import { AuditLogRepository } from './audit-log.repository';
 import { BackupCodeRepository } from './backup-code.repository';
-import { IdempotencyKeyRepository } from './idempotency-key.repository';
-import { IdempotencyKeyAnonRepository } from './idempotency-key-anon.repository';
 import { JwtSecretVersionRepository } from './jwt-secret-version.repository';
 import { LoginAttemptRepository } from './login-attempt.repository';
 import { PermissionRepository } from './permission.repository';
 // import { RateLimitBucketRepository } from './rate-limit-bucket.repository';
+// import { IdempotencyKeyRepository } from './idempotency-key.repository';
+// import { IdempotencyKeyAnonRepository } from './idempotency-key-anon.repository';
 import { RoleRepository } from './role.repository';
 import { RolePermissionRepository } from './role-permission.repository';
 import { UserRoleRepository } from './user-role.repository';
@@ -30,8 +30,8 @@ import { WebhookSubscriptionRepository } from './webhook-subscription.repository
     ApiKeyRepository,
     AuditLogRepository,
     BackupCodeRepository,
-    IdempotencyKeyRepository,
-    IdempotencyKeyAnonRepository,
+    // IdempotencyKeyRepository,
+    // IdempotencyKeyAnonRepository,
     JwtSecretVersionRepository,
     LoginAttemptRepository,
     PermissionRepository,
