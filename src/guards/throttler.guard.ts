@@ -14,7 +14,7 @@ import { RedisStorageRegistry } from '../redis/redis-storage.registry';
 export class AdvancedRateLimitGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
-    private store: RedisStorageRegistry,
+    private redis: RedisStorageRegistry,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -34,7 +34,7 @@ export class AdvancedRateLimitGuard implements CanActivate {
     console.log(config);
     const key = this.buildKey(req, handler.name);
 
-    let bucketData = await this.store.rateLimitStore.get(key);
+    let bucketData = await this.redis.rateLimitStore.get(key);
 
     let bucket: TokenBucket;
 
@@ -52,7 +52,7 @@ export class AdvancedRateLimitGuard implements CanActivate {
 
     const allowed = bucket.consume(Date.now());
 
-    await this.store.rateLimitStore.set(key, bucket.serialize());
+    await this.redis.rateLimitStore.set(key, bucket.serialize());
 
     if (!allowed) {
       throw new HttpException(

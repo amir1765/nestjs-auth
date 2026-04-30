@@ -1,5 +1,3 @@
-// auth.service.ts
-
 import {
   Injectable,
   UnauthorizedException,
@@ -9,8 +7,11 @@ import {
 import { RepositoryRegistry } from 'src/repositories/prisma/repository.registry';
 import { Device } from '@prisma/client';
 import { TokenService } from './token.service';
-import { hashPassword, verifyPassword } from '../../common/crypto';
 import { SecurityService } from './security.service';
+import { AuditService } from './audit.service';
+import { hashPassword, verifyPassword } from '../../common/crypto';
+import {  RegisterOutput ,LoginOutput} from '../../common/interface/auth/registerService';
+import { RedisStorageRegistry } from '../../redis/redis-storage.registry';
 
 @Injectable()
 export class AuthService {
@@ -18,12 +19,14 @@ export class AuthService {
     private readonly repo: RepositoryRegistry,
     private readonly tokenService: TokenService,
     private readonly securityService: SecurityService,
+    private readonly audit: AuditService,
+    private readonly redis: RedisStorageRegistry,
   ) {}
 
   // ===============================
   // 🧾 REGISTER
   // ===============================
-  async register(email: string, password: string) {
+  async register(email:string, password:string): Promise<RegisterOutput>  {
     const exists = await this.repo.user.existsByEmail(email);
 
     if (exists) {
@@ -37,7 +40,13 @@ export class AuthService {
       passwordHash,
     });
 
-    return user;
+    return {
+      id: user.id,
+      email: user.email,
+      createdAt: user.createdAt,
+      fullName: user.fullName,
+      avatarUrl: user.avatarUrl
+    };
   }
 
   // ===============================
@@ -53,15 +62,28 @@ export class AuthService {
     city?: string;
     lat?: number;
     lon?: number;
-  }) {
+  }): Promise<LoginOutput>  {
     const user = await this.repo.user.findByEmail(params.email);
 
+    // ❌ USER NOT FOUND
     if (!user) {
+      await this.audit.loginFailure({
+        email: params.email,
+        ipAddress: params.ip,
+        userAgent: params.userAgent,
+      });
+
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    //  account lock check
+    // 🚫 ACCOUNT LOCKED
     if (user.lockUntil && user.lockUntil > new Date()) {
+      await this.audit.suspiciousActivity({
+        userId: user.id,
+        ipAddress: params.ip,
+        reasons: ['Login attempt while account locked'],
+      });
+
       throw new ForbiddenException('Account locked');
     }
 
@@ -70,18 +92,29 @@ export class AuthService {
       params.password,
     );
 
+    // ❌ WRONG PASSWORD
     if (!isValid) {
       await this.handleFailedLogin(user.id, params);
+
+      await this.audit.loginFailure({
+        userId: user.id,
+        email: params.email,
+        ipAddress: params.ip,
+        userAgent: params.userAgent,
+      });
+
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // ✅ reset attempts
+    // ✅ RESET FAILED ATTEMPTS
     await this.repo.user.resetFailedAttempts(user.id);
 
-    // ✅ update login metadata
+    // ✅ UPDATE LAST LOGIN
     await this.repo.user.updateLastLogin(user.id, params.ip);
 
-    //  DEVICE RESOLUTION
+    // ===============================
+    // 📱 DEVICE RESOLUTION
+    // ===============================
     let device: Device | null = null;
 
     if (params.fingerprint) {
@@ -96,7 +129,7 @@ export class AuthService {
         lon: params.lon,
       });
 
-      // 🚫 block check
+      // 🚫 BLOCK CHECK
       this.securityService.ensureDeviceAllowed(device);
 
       // 🧠 RISK EVALUATION
@@ -107,18 +140,26 @@ export class AuthService {
         country: params.country,
       });
 
-      // 🔥 persist risk
+      // 🔥 APPLY RISK
       await this.securityService.applyRiskToDevice(
         device.id,
         risk.level,
       );
 
-      // (optional later)
-      // if (risk.level === 'HIGH') require 2FA
+      // 🚨 HIGH RISK DETECTED
+      if (risk.level === 'HIGH') {
+        await this.audit.suspiciousActivity({
+          userId: user.id,
+          deviceId: device.id,
+          ipAddress: params.ip,
+          reasons: risk.reasons || ['High risk login detected'],
+        });
+      }
     }
 
-    // CREATE SESSION
-
+    // ===============================
+    // 🧾 CREATE SESSION
+    // ===============================
     const session = await this.repo.session.create({
       user: { connect: { id: user.id } },
       device: device ? { connect: { id: device.id } } : undefined,
@@ -127,34 +168,56 @@ export class AuthService {
       expiresAt: this.getSessionExpiry(),
     });
 
-
-    //  ISSUE TOKENS
-
+    // ===============================
+    // 🔑 ISSUE TOKENS
+    // ===============================
     const tokens = await this.tokenService.issueTokens(
       user.id,
       session.id,
     );
 
+    // ✅ SUCCESS LOGIN AUDIT
+    await this.audit.loginSuccess({
+      userId: user.id,
+      sessionId: session.id,
+      deviceId: device?.id,
+      ipAddress: params.ip,
+      userAgent: params.userAgent,
+    });
+
     return {
-      user,
       ...tokens,
+      user:{
+        id: user.id,
+        email: user.email,
+        createdAt: user.createdAt,
+        fullName: user.fullName,
+        avatarUrl: user.avatarUrl
+      },
+
     };
   }
 
   // ===============================
-  // 🔁 REFRESH
+  // 🔁 REFRESH TOKEN
   // ===============================
   async refresh(refreshToken: string) {
-    return this.tokenService.rotateRefreshToken(refreshToken);
+    const result = await this.tokenService.rotateRefreshToken(refreshToken);
+    return result;
   }
 
   // ===============================
   // 🚪 LOGOUT (single session)
   // ===============================
-  async logout(sessionId: string) {
+  async logout(sessionId: string, userId: string, ip?: string) {
     await this.repo.refreshToken.revokeAllBySession(sessionId);
-
     await this.repo.session.revoke(sessionId, 'LOGOUT');
+    await this.redis.sessionStore.del(sessionId);
+    await this.audit.logout({
+      userId,
+      sessionId,
+      ipAddress: ip,
+    });
   }
 
   // ===============================
@@ -165,9 +228,11 @@ export class AuthService {
 
     for (const s of sessions) {
       await this.repo.refreshToken.revokeAllBySession(s.id);
+      await this.redis.sessionStore.del(s.id);
     }
 
     await this.repo.session.revokeManyByUser(userId);
+    await this.audit.logoutAll({ userId });
   }
 
   // ===============================
@@ -187,10 +252,17 @@ export class AuthService {
 
     const updated = await this.repo.user.incrementFailedAttempts(userId);
 
+    // 🚨 LOCK ACCOUNT
     if (updated.failedLoginAttempts >= 5) {
       const lockUntil = new Date(Date.now() + 15 * 60 * 1000);
 
       await this.repo.user.lockAccount(userId, lockUntil);
+
+      await this.audit.suspiciousActivity({
+        userId,
+        ipAddress: params.ip,
+        reasons: ['Account locked due to too many failed attempts'],
+      });
     }
   }
 
@@ -199,7 +271,7 @@ export class AuthService {
   // ===============================
   private getSessionExpiry() {
     const date = new Date();
-    date.setDate(date.getDate() + 7); // align with refresh token
+    date.setDate(date.getDate() + 7);
     return date;
   }
 }

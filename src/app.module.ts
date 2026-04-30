@@ -12,6 +12,8 @@ import {AdvancedRateLimitGuard } from './guards/throttler.guard';
 import { APP_GUARD } from '@nestjs/core';
 import { RedisStorageModule,  } from './redis/redis-storage.module';
 import { IdempotencyModule } from './common/idempotency/idempotency.module';
+import { AuthModule } from './api/auth/auth.module';
+import { JwtService } from '@nestjs/jwt';
 
 @Module({
   imports: [
@@ -33,7 +35,8 @@ import { IdempotencyModule } from './common/idempotency/idempotency.module';
     RepositoriesModule,
     RedisModule,
     RedisStorageModule,
-    IdempotencyModule
+    IdempotencyModule,
+    AuthModule
   ],
   controllers: [AppController],
   providers: [
@@ -41,6 +44,7 @@ import { IdempotencyModule } from './common/idempotency/idempotency.module';
     provide: APP_GUARD,
     useClass: AdvancedRateLimitGuard,
   },
-    AppService],
+    AppService,
+  ],
 })
 export class AppModule {}

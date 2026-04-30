@@ -4,7 +4,7 @@ import { RedisStorageRegistry } from '../../redis/redis-storage.registry';
 
 @Injectable()
 export class IdempotencyService {
-  constructor(private readonly store: RedisStorageRegistry) {}
+  constructor(private readonly redis: RedisStorageRegistry) {}
 
   private USER_TTL = 1000 * 60 * 60 * 48;
   private GUEST_TTL = 1000 * 60 * 60 * 72;
@@ -44,7 +44,7 @@ export class IdempotencyService {
 
     const ttl = params.userId ? this.USER_TTL : this.GUEST_TTL;
 
-    const existing = await this.store.idempotency.get(
+    const existing = await this.redis.idempotency.get(
       params.key,
       params.userId,
     );
@@ -71,7 +71,7 @@ export class IdempotencyService {
     }
 
     // ---------- CREATE LOCK ----------
-    const locked = await this.store.idempotency.createPending({
+    const locked = await this.redis.idempotency.createPending({
       key: params.key,
       userId: params.userId,
       operation: params.operation,
@@ -98,7 +98,7 @@ export class IdempotencyService {
   }) {
     const ttl = params.userId ? this.USER_TTL : this.GUEST_TTL;
 
-    await this.store.idempotency.markSuccess({
+    await this.redis.idempotency.markSuccess({
       key: params.key,
       userId: params.userId,
       response: params.response,
@@ -112,6 +112,6 @@ export class IdempotencyService {
     key: string;
     userId?: string;
   }) {
-    await this.store.idempotency.markError(params.key, params.userId);
+    await this.redis.idempotency.markError(params.key, params.userId);
   }
 }

@@ -24,18 +24,23 @@ export class RepositoryRegistry {
     public readonly session: SessionRepository,
     public readonly refreshToken: RefreshTokenRepository,
     public readonly device: DeviceRepository,
-    public readonly apiKey: ApiKeyRepository,
     public readonly auditLog: AuditLogRepository,
-    public readonly backupCode: BackupCodeRepository,
-    // public readonly idempotencyKey: IdempotencyKeyRepository,
-    // public readonly idempotencyKeyAnon: IdempotencyKeyAnonRepository,
-    public readonly jwtSecretVersion: JwtSecretVersionRepository,
     public readonly loginAttempt: LoginAttemptRepository,
+
+    public readonly backupCode: BackupCodeRepository,
+    public readonly jwtSecretVersion: JwtSecretVersionRepository,
+
     public readonly permission: PermissionRepository,
-   // public readonly rateLimitBucket: RateLimitBucketRepository,
     public readonly role: RoleRepository,
     public readonly rolePermission: RolePermissionRepository,
     public readonly userRole: UserRoleRepository,
+
+    public readonly apiKey: ApiKeyRepository,
     public readonly webhookSubscription: WebhookSubscriptionRepository,
+
+    // public readonly idempotencyKey: IdempotencyKeyRepository,
+    // public readonly idempotencyKeyAnon: IdempotencyKeyAnonRepository,
+    // public readonly rateLimitBucket: RateLimitBucketRepository,
+
   ) {}
 }

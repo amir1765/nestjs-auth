@@ -5,6 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 
 import { RepositoryRegistry } from 'src/repositories/prisma/repository.registry';
 import { generateSecureToken, hashToken } from '../../common/crypto';
+import { ConfigService } from '@nestjs/config';
 
 
 @Injectable()
@@ -12,6 +13,7 @@ export class TokenService {
   constructor(
     private readonly jwt: JwtService,
     private readonly repo: RepositoryRegistry,
+    private readonly config: ConfigService,
   ) {}
 
   // ===============================
@@ -29,7 +31,7 @@ export class TokenService {
       jti,
       expiresAt: this.getRefreshExpiry(),
     });
-
+    console.log("wrt");
     const accessToken = await this.signAccessToken(userId, sessionId);
 
     return {
@@ -127,16 +129,18 @@ export class TokenService {
       {
         sub: userId,
         sid: sessionId,
+        jti: generateSecureToken(16),
       },
       {
-        expiresIn: '15m', // TODO: move to config
+        expiresIn: this.config.get('JWT_ACCESS_EXPIRES')
       },
     );
   }
 
   private getRefreshExpiry() {
+    const days = this.config.get<number>('JWT_REFRESH_EXPIRES') ?? 7; // fallback to 7 days
     const date = new Date();
-    date.setDate(date.getDate() + 7); // TODO: config
+    date.setDate(date.getDate() + days);
     return date;
   }
 }
