@@ -11,20 +11,6 @@ export class LoginDto {
   @MinLength(8)
   password!: string;
 
-  @ApiProperty({ example: '192.168.1.1' })
-  @IsIP()
-  ip!: string;
-
-  @ApiPropertyOptional({ example: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' })
-  @IsOptional()
-  @IsString()
-  userAgent?: string;
-
-  @ApiPropertyOptional({ example: 'd41d8cd98f00b204e9800998ecf8427e' })
-  @IsOptional()
-  @IsString()
-  fingerprint?: string;
-
   @ApiPropertyOptional({ example: 'US' })
   @IsOptional()
   @IsString()

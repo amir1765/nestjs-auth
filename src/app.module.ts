@@ -13,7 +13,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { RedisStorageModule,  } from './redis/redis-storage.module';
 import { IdempotencyModule } from './common/idempotency/idempotency.module';
 import { AuthModule } from './api/auth/auth.module';
-import { JwtService } from '@nestjs/jwt';
+import { RequestContextModule } from './common/request-context/request-context.module';
 
 @Module({
   imports: [
@@ -31,12 +31,16 @@ import { JwtService } from '@nestjs/jwt';
         },
       ],
     }),
+    //db req  handler
     PrismaModule,
     RepositoriesModule,
     RedisModule,
     RedisStorageModule,
+    //core
+    AuthModule,
+    //common folder for isolated sys which is independent to actual logic but can help the core
     IdempotencyModule,
-    AuthModule
+    RequestContextModule,
   ],
   controllers: [AppController],
   providers: [

@@ -73,9 +73,6 @@ export class AuthController {
     const result = await this.authService.login({
       email: body.email,
       password: body.password,
-      ip: this.extractIP(req),
-      userAgent: req.headers['user-agent'],
-      fingerprint: body.fingerprint,
     });
 
     // ✅ Web support (cookie-based refresh)

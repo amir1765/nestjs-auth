@@ -12,6 +12,7 @@ import { AuditService } from './audit.service';
 import { hashPassword, verifyPassword } from '../../common/crypto';
 import {  RegisterOutput ,LoginOutput} from '../../common/interface/auth/registerService';
 import { RedisStorageRegistry } from '../../redis/redis-storage.registry';
+import { RequestContextService } from '../../common/request-context/request-context.service';
 
 @Injectable()
 export class AuthService {
@@ -21,6 +22,7 @@ export class AuthService {
     private readonly securityService: SecurityService,
     private readonly audit: AuditService,
     private readonly redis: RedisStorageRegistry,
+    private readonly ctx: RequestContextService,
   ) {}
 
   // ===============================
@@ -55,22 +57,20 @@ export class AuthService {
   async login(params: {
     email: string;
     password: string;
-    ip: string;
-    userAgent?: string;
-    fingerprint?: string;
     country?: string;
     city?: string;
     lat?: number;
     lon?: number;
   }): Promise<LoginOutput>  {
     const user = await this.repo.user.findByEmail(params.email);
+    const { ip, userAgent, fingerprint } = this.ctx.get();
 
     // ❌ USER NOT FOUND
     if (!user) {
       await this.audit.loginFailure({
         email: params.email,
-        ipAddress: params.ip,
-        userAgent: params.userAgent,
+        ipAddress: ip,
+        userAgent: userAgent,
       });
 
       throw new UnauthorizedException('Invalid credentials');
@@ -80,7 +80,7 @@ export class AuthService {
     if (user.lockUntil && user.lockUntil > new Date()) {
       await this.audit.suspiciousActivity({
         userId: user.id,
-        ipAddress: params.ip,
+        ipAddress: ip,
         reasons: ['Login attempt while account locked'],
       });
 
@@ -94,13 +94,13 @@ export class AuthService {
 
     // ❌ WRONG PASSWORD
     if (!isValid) {
-      await this.handleFailedLogin(user.id, params);
+      await this.handleFailedLogin(user.id, {email: params.email ,ip: ip, userAgent: userAgent});
 
       await this.audit.loginFailure({
         userId: user.id,
         email: params.email,
-        ipAddress: params.ip,
-        userAgent: params.userAgent,
+        ipAddress: ip,
+        userAgent: userAgent,
       });
 
       throw new UnauthorizedException('Invalid credentials');
@@ -110,19 +110,19 @@ export class AuthService {
     await this.repo.user.resetFailedAttempts(user.id);
 
     // ✅ UPDATE LAST LOGIN
-    await this.repo.user.updateLastLogin(user.id, params.ip);
+    await this.repo.user.updateLastLogin(user.id, ip);
 
     // ===============================
     // 📱 DEVICE RESOLUTION
     // ===============================
     let device: Device | null = null;
 
-    if (params.fingerprint) {
+    if (fingerprint) {
       device = await this.securityService.resolveDevice({
         userId: user.id,
-        fingerprint: params.fingerprint,
-        ipAddress: params.ip,
-        userAgent: params.userAgent,
+        fingerprint: fingerprint,
+        ipAddress: ip,
+        userAgent: userAgent,
         country: params.country,
         city: params.city,
         lat: params.lat,
@@ -135,8 +135,8 @@ export class AuthService {
       // 🧠 RISK EVALUATION
       const risk = this.securityService.evaluateLoginRisk({
         device,
-        ipAddress: params.ip,
-        userAgent: params.userAgent,
+        ipAddress: ip,
+        userAgent: userAgent,
         country: params.country,
       });
 
@@ -151,7 +151,7 @@ export class AuthService {
         await this.audit.suspiciousActivity({
           userId: user.id,
           deviceId: device.id,
-          ipAddress: params.ip,
+          ipAddress: ip,
           reasons: risk.reasons || ['High risk login detected'],
         });
       }
@@ -163,8 +163,8 @@ export class AuthService {
     const session = await this.repo.session.create({
       user: { connect: { id: user.id } },
       device: device ? { connect: { id: device.id } } : undefined,
-      ipAddress: params.ip,
-      userAgent: params.userAgent,
+      ipAddress: ip,
+      userAgent: userAgent,
       expiresAt: this.getSessionExpiry(),
     });
 
@@ -181,8 +181,8 @@ export class AuthService {
       userId: user.id,
       sessionId: session.id,
       deviceId: device?.id,
-      ipAddress: params.ip,
-      userAgent: params.userAgent,
+      ipAddress: ip,
+      userAgent: userAgent,
     });
 
     return {
