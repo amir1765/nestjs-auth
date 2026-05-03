@@ -13,7 +13,7 @@ export const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(64),
 
   JWT_ACCESS_EXPIRES: z.coerce.number(),
-  JWT_REFRESH_EXPIRES: z.string(),
+  JWT_REFRESH_EXPIRES: z.coerce.number().default(7),
 
   SESSION_ABSOLUTE_TIMEOUT: z.string(),
 
