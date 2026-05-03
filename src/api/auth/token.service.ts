@@ -6,6 +6,8 @@ import { JwtService } from '@nestjs/jwt';
 import { RepositoryRegistry } from 'src/repositories/prisma/repository.registry';
 import { generateSecureToken, hashToken } from '../../common/crypto';
 import { ConfigService } from '@nestjs/config';
+import { AuditService } from './audit.service';
+import { RequestContextService } from '../../common/request-context/request-context.service';
 
 
 @Injectable()
@@ -14,6 +16,8 @@ export class TokenService {
     private readonly jwt: JwtService,
     private readonly repo: RepositoryRegistry,
     private readonly config: ConfigService,
+    private readonly audit: AuditService,
+    private readonly ctx: RequestContextService,
   ) {}
 
   // ===============================
@@ -31,7 +35,7 @@ export class TokenService {
       jti,
       expiresAt: this.getRefreshExpiry(),
     });
-    console.log("wrt");
+
     const accessToken = await this.signAccessToken(userId, sessionId);
 
     return {
@@ -44,11 +48,12 @@ export class TokenService {
   // 🔁 ROTATE TOKEN
   // ===============================
   async rotateRefreshToken(rawToken: string) {
+
     const tokenHash = hashToken(rawToken);
 
     const token = await this.repo.refreshToken.findByTokenHash(tokenHash);
 
-    if (!token) {
+    if (!token  ) {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
@@ -57,14 +62,18 @@ export class TokenService {
     if (!fullToken) {
       throw new UnauthorizedException('Invalid refresh token');
     }
+    if (fullToken.session.isRevoked) {
+      throw new UnauthorizedException('Session revoked');
+    }
+    const { ip, userAgent } = this.ctx.get();
+    //  REUSE DETECTION
 
-    // ===============================
-    // 🚨 REUSE DETECTION
-    // ===============================
     if (fullToken.revokedAt) {
       if (fullToken.children.length > 0) {
         // 🔥 ATTACK DETECTED
+
         await this.handleReuseAttack(fullToken.sessionId);
+        await this.audit.tokenReuseDetected({userId: fullToken.session.userId,sessionId: fullToken.session.id,ipAddress: ip, userAgent })
       }
 
       throw new UnauthorizedException('Token already used');
@@ -74,14 +83,14 @@ export class TokenService {
       throw new UnauthorizedException('Token expired');
     }
 
-    // ===============================
-    // 🔒 REVOKE CURRENT TOKEN
-    // ===============================
+
+    //  REVOKE CURRENT TOKEN
+
     await this.repo.refreshToken.revoke(fullToken.id);
 
-    // ===============================
-    // 🔁 CREATE NEW TOKEN (CHAIN)
-    // ===============================
+
+    // CREATE NEW TOKEN (CHAIN)
+
     const newRaw = generateSecureToken();
     const newHash = hashToken(newRaw);
 
@@ -115,10 +124,6 @@ export class TokenService {
     await this.repo.session.update(sessionId, {
       isRevoked: true,
     });
-
-    // (optional later)
-    // - log audit
-    // - notify user
   }
 
   // ===============================
@@ -132,7 +137,7 @@ export class TokenService {
         jti: generateSecureToken(16),
       },
       {
-        expiresIn: this.config.get('JWT_ACCESS_EXPIRES')
+        expiresIn: this.config.get<number>('JWT_ACCESS_EXPIRES') ?? 900
       },
     );
   }

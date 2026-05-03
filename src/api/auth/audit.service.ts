@@ -23,9 +23,7 @@ export class AuditService {
   async log(params: AuditParams) {
     return this.repo.auditLog.create({
       action: params.action,
-      user: params.userId
-        ? { connect: { id: params.userId } }
-        : undefined,
+      user: params.userId ? { connect: { id: params.userId } } : undefined,
       session: params.sessionId
         ? { connect: { id: params.sessionId } }
         : undefined,
@@ -88,9 +86,7 @@ export class AuditService {
     });
   }
 
-  async logoutAll(params: {
-    userId: string;
-  }) {
+  async logoutAll(params: { userId: string }) {
     return this.log({
       action: AuditAction.FORCE_LOGOUT_ALL,
       userId: params.userId,
@@ -98,20 +94,19 @@ export class AuditService {
     });
   }
 
+  // async tokenRefreshed(params: {
+  //   userId: string;
+  //   sessionId: string;
+  // }) {
+  //   return this.log({
+  //     action: AuditAction.TOKEN_REFRESH,
+  //     userId: params.userId,
+  //     sessionId: params.sessionId,
+  //   });
+  // }
   // =====================================================
   // 🔁 TOKEN EVENTS
   // =====================================================
-  async tokenRefreshed(params: {
-    userId: string;
-    sessionId: string;
-  }) {
-    return this.log({
-      action: AuditAction.TOKEN_REFRESH,
-      userId: params.userId,
-      sessionId: params.sessionId,
-    });
-  }
-
   async tokenReuseDetected(params: {
     userId: string;
     sessionId: string;
