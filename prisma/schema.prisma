@@ -59,6 +59,19 @@ enum DeviceRiskLevel {
   BLOCKED
 }
 
+enum AuthTokenType {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+  MAGIC_LOGIN
+  LOGIN_VERIFY
+}
+
+enum LoginAttemptType {
+  PASSWORD
+  OTP
+  MAGIC_LOGIN
+}
+
 // ------------------------------
 // RBAC Models (Many-to-Many)
 // ------------------------------
@@ -142,6 +155,7 @@ model User {
   backupCodes          BackupCode[]
   // idempotencyKeys      IdempotencyKey[]
   webhookSubscriptions WebhookSubscription[]
+  AuthToken            AuthToken[]
 
   @@index([email])
   @@index([lockUntil])
@@ -199,18 +213,20 @@ model RefreshToken {
 }
 
 model LoginAttempt {
-  id        String   @id @default(cuid())
+  id        String           @id @default(cuid())
   email     String // identifier used (email)
   ipAddress String
   success   Boolean
   userAgent String?
-  timestamp DateTime @default(now())
+  type      LoginAttemptType
+  timestamp DateTime         @default(now())
   userId    String?
-  user      User?    @relation(fields: [userId], references: [id])
+  user      User?            @relation(fields: [userId], references: [id])
 
   @@index([email, timestamp])
   @@index([ipAddress, timestamp])
   @@index([success, timestamp])
+  @@index([type, timestamp])
   @@map("login_attempts")
 }
 
@@ -406,3 +422,24 @@ model RequestNonce {
 //   @@index([key])
 //   @@map("rate_limit_buckets")
 // }
+model AuthToken {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type      AuthTokenType
+  tokenHash String        @unique
+
+  ip          String
+  userAgent   String?
+  fingerprint String?
+
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([tokenHash])
+  @@index([userId, type])
+  @@index([expiresAt])
+  @@map("auth_tokens")
+}

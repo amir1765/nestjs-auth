@@ -16,6 +16,7 @@ import { RoleRepository } from '../role.repository';
 import { RolePermissionRepository } from '../role-permission.repository';
 import { UserRoleRepository } from '../user-role.repository';
 import { WebhookSubscriptionRepository } from '../webhook-subscription.repository';
+import { AuthTokenRepository } from '../auth-token.repository';
 
 @Injectable()
 export class RepositoryRegistry {
@@ -28,6 +29,7 @@ export class RepositoryRegistry {
     public readonly loginAttempt: LoginAttemptRepository,
 
     public readonly backupCode: BackupCodeRepository,
+    public readonly authToken: AuthTokenRepository,
     public readonly jwtSecretVersion: JwtSecretVersionRepository,
 
     public readonly permission: PermissionRepository,

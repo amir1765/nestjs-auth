@@ -14,6 +14,7 @@ import { RedisStorageModule,  } from './redis/redis-storage.module';
 import { IdempotencyModule } from './common/idempotency/idempotency.module';
 import { AuthModule } from './api/auth/auth.module';
 import { RequestContextModule } from './common/request-context/request-context.module';
+import { MailModule } from './common/mail/mail.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { RequestContextModule } from './common/request-context/request-context.m
     //common folder for isolated sys which is independent to actual logic but can help the core
     IdempotencyModule,
     RequestContextModule,
+    MailModule
   ],
   controllers: [AppController],
   providers: [

@@ -32,6 +32,14 @@ export class UserRepository {
     });
   }
 
+  async findVerifiedByEmail(email: string): Promise<User | null> {
+    return this.prisma.user.findFirst({
+      where: {
+        email,
+        emailVerified: true,
+      },
+    });
+  }
   // ---------- FIND MANY ----------
   async findMany(args: Prisma.UserFindManyArgs = {}): Promise<User[]> {
     return this.prisma.user.findMany(args);
@@ -141,12 +149,34 @@ export class UserRepository {
 
   // ---------- EXISTS ----------
   async existsByEmail(email: string): Promise<boolean> {
-    const count = await this.prisma.user.count({
+    const user = await this.prisma.user.findUnique({
       where: { email },
+      select: { id: true },
     });
-    return count > 0;
+
+    return !!user;
   }
 
+  // ---------- EMAIL VERIFICATION ----------
+  async markEmailVerified(id: string): Promise<User> {
+    return this.prisma.user.update({
+      where: { id },
+      data: {
+        emailVerified: true,
+      },
+    });
+  }
+
+// ---------- PASSWORD UPDATE ----------
+  async updatePassword(id: string, passwordHash: string): Promise<User> {
+    return this.prisma.user.update({
+      where: { id },
+      data: {
+        passwordHash,
+        tokenVersion: { increment: 1 }, // 🔥 VERY IMPORTANT
+      },
+    });
+  }
   // ---------- ADVANCED ----------
   async withRelations(id: string): Promise<Prisma.UserGetPayload<{
     include: {

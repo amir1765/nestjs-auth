@@ -18,6 +18,7 @@ import { RoleRepository } from './role.repository';
 import { RolePermissionRepository } from './role-permission.repository';
 import { UserRoleRepository } from './user-role.repository';
 import { WebhookSubscriptionRepository } from './webhook-subscription.repository';
+import { AuthTokenRepository } from './auth-token.repository';
 
 @Global()
 @Module({
@@ -40,6 +41,7 @@ import { WebhookSubscriptionRepository } from './webhook-subscription.repository
     RolePermissionRepository,
     UserRoleRepository,
     WebhookSubscriptionRepository,
+    AuthTokenRepository
   ],
   exports: [RepositoryRegistry],
 })
