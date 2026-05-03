@@ -29,6 +29,7 @@ import {
   VerifyOtpDto,
   ResetPasswordDto,
 } from 'src/common/dto';
+import { TokenService } from './token.service';
 
 type AuthenticatedRequest = Request & {
   user: {
@@ -40,7 +41,9 @@ type AuthenticatedRequest = Request & {
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService,
+  private readonly tokenService: TokenService,
+  ) {}
 
   // ===============================
   // 🧾 REGISTER
@@ -108,7 +111,7 @@ export class AuthController {
       throw new UnauthorizedException('Refresh token missing');
     }
 
-    const result = await this.authService.refresh(token);
+    const result = await this.tokenService.rotateRefreshToken(token);
 
     this.attachRefreshCookie(res, result.refreshToken);
 

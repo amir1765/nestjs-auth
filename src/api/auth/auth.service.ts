@@ -227,11 +227,6 @@ export class AuthService {
     await this.audit.logoutAll({ userId });
   }
 
-  // Refresh token
-  async refresh(refreshToken: string) {
-    return this.tokenService.rotateRefreshToken(refreshToken);
-  }
-
   // --- Private helpers ---
 
   private async handleVerifyEmail(
