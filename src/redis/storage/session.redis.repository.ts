@@ -4,6 +4,8 @@ import { RedisService } from '../redis.service';
 export type CachedSession = {
   userId: string;
   isRevoked: boolean;
+  ipAddress?: string;
+  userAgent?: string;
 };
 
 @Injectable()

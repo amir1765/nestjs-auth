@@ -155,4 +155,36 @@ export class AuditService {
       severity: 'warning',
     });
   }
+  // =====================================================
+// 🚨 SESSION HIJACK DETECTED
+// =====================================================
+  async sessionHijackDetected(params: {
+    userId: string;
+    sessionId: string;
+    ipAddress?: string;
+    userAgent?: string;
+    metadata:{
+    expectedIp ? : string;
+    expectedUA ? : string;
+    ipAddress ? : string;
+    userAgent ? : string;
+  }
+    reason: 'IP_MISMATCH' | 'UA_MISMATCH';
+  }) {
+    return this.log({
+      action: AuditAction.SESSION_HIJACK_DETECTED,
+      userId: params.userId,
+      sessionId: params.sessionId,
+      ipAddress: params.ipAddress,
+      userAgent: params.userAgent,
+        metadata: {
+          reason: params.reason,
+          expectedIp: params.metadata.expectedIp,
+          actualIp: params.metadata.ipAddress,
+          expectedUA: params.metadata.expectedUA,
+          actualUA: params.metadata.userAgent,
+        },
+      severity: 'critical',
+    });
+  }
 }

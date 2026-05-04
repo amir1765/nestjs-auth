@@ -10,12 +10,12 @@ export class RequestContextMiddleware implements NestMiddleware {
   constructor(private readonly ctx: RequestContextService) {}
 
   use(req: Request, res: Response, next: NextFunction) {
-    const ip =
-      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-      req.socket.remoteAddress;
+    const ip = req.ip;
+
     if (!ip) {
       throw new BadRequestException('No IP detected. Access denied.');
     }
+
     const userAgent = req.headers['user-agent'] || undefined;
 
     const fingerprint =

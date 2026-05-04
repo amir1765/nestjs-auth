@@ -108,45 +108,7 @@ export class SecurityService {
     return this.repo.device.updateRiskLevel(deviceId, risk);
   }
 
-  // =====================================================
-  // 🚨 SESSION HIJACK DETECTION
-  // (used later in middleware)
-  // =====================================================
-  async detectSessionHijack(params: {
-    sessionId: string;
-    ipAddress?: string;
-    userAgent?: string;
-  }): Promise<boolean> {
-    const session = await this.repo.session.findWithRelations(
-      params.sessionId,
-    );
 
-    if (!session || session.isRevoked) {
-      return true;
-    }
-
-    // compare IP
-    if (
-      params.ipAddress &&
-      session.ipAddress &&
-      params.ipAddress !== session.ipAddress
-    ) {
-      await this.repo.session.revoke(session.id, 'IP_MISMATCH');
-      return true;
-    }
-
-    // compare user agent
-    if (
-      params.userAgent &&
-      session.userAgent &&
-      params.userAgent !== session.userAgent
-    ) {
-      await this.repo.session.revoke(session.id, 'UA_MISMATCH');
-      return true;
-    }
-
-    return false;
-  }
 
   // =====================================================
   // 🔐 DEVICE SECURITY CHECK (LOGIN BLOCK)
