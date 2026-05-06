@@ -118,6 +118,9 @@ export class AuthService {
     );
 
     const { ip, fingerprint, userAgent } = this.ctx.get();
+    if(!user.emailVerified){
+      await this.repo.user.markEmailVerified(userId);
+    }
 
     await this.repo.user.resetFailedAttempts(user.id);
     await this.repo.user.updateLastLogin(user.id, ip);
