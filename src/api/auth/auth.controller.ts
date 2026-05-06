@@ -82,9 +82,10 @@ export class AuthController {
     @Body() body: VerifyOtpDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.authService.verifyLoginOTP(
+    const result = await this.authService.verifyLogin(
       body.userId,
       body.otp,
+      body.verifyType
     );
 
     // ✅ attach refresh cookie

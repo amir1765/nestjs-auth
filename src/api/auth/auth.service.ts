@@ -16,6 +16,9 @@ import { SecurityService } from './security.service';
 import { AuthTokenService } from './token-auth.service';
 import { TokenService } from './token.service';
 import { LoginOutput } from '../../common/interface/auth/registerService';
+import { TwoFAService } from '../auth-twofa/twofa.service';
+
+type VerifyType = 'OTP' | 'TOTP';
 
 @Injectable()
 export class AuthService {
@@ -27,9 +30,12 @@ export class AuthService {
     private readonly redis: RedisStorageRegistry,
     private readonly ctx: RequestContextService,
     private readonly authTokenService: AuthTokenService,
+    private readonly twoFA: TwoFAService,
   ) {}
 
-  // Register
+  // --------------------------------------------------
+  // 🧾 REGISTER
+  // --------------------------------------------------
   async register(email: string, password: string) {
     const exists = await this.repo.user.existsByEmail(email);
     if (exists) {
@@ -52,12 +58,14 @@ export class AuthService {
     return { success: true };
   }
 
-  // Verify email OTP
+  // --------------------------------------------------
+  // 📧 VERIFY EMAIL
+  // --------------------------------------------------
   async verifyEmail(userId: string, otp: string) {
     const user = await this.repo.user.findById(userId);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    await this.handleVerifyEmail(
+    await this.handleVerifyToken(
       userId,
       user.email,
       otp,
@@ -69,7 +77,9 @@ export class AuthService {
     return { success: true };
   }
 
-  // Login (step 1 – request OTP)
+  // --------------------------------------------------
+  // 🔐 LOGIN STEP 1
+  // --------------------------------------------------
   async login(params: { email: string; password: string }) {
     const user = await this.repo.user.findByEmail(params.email);
     const { ip, userAgent } = this.ctx.get();
@@ -88,6 +98,7 @@ export class AuthService {
     }
 
     const isValid = await verifyPassword(user.passwordHash, params.password);
+
     if (!isValid) {
       await this.handleFailedAttempt(user.id, {
         email: params.email,
@@ -96,37 +107,79 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // ✅ 2FA ENABLED → REQUIRE TOTP
+    if (user.totpEnabled) {
+      return {
+        success: true,
+        requires2FA: true,
+        userId: user.id,
+      };
+    }
+
+    // ✅ OTHERWISE SEND OTP
     await this.authTokenService.sendOTP(
       user.id,
       user.email,
       AuthTokenType.LOGIN_VERIFY,
     );
-    return { success: true };
+
+    return {
+      success: true,
+      requires2FA: false,
+      userId: user.id,
+    };
   }
 
-  // Login (step 2 – verify OTP)
-  async verifyLoginOTP(userId: string, otp: string):Promise<LoginOutput> {
+  // --------------------------------------------------
+  // 🔐 LOGIN STEP 2 (VERIFY)
+  // --------------------------------------------------
+  async verifyLogin(
+    userId: string,
+    token: string,
+    verifyType: VerifyType,
+  ): Promise<LoginOutput> {
     const user = await this.repo.user.findById(userId);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    await this.handleVerifyEmail(
-      userId,
-      user.email,
-      otp,
-      LoginAttemptType.OTP,
-      AuthTokenType.LOGIN_VERIFY,
-    );
+    // 🚨 enforce correct method
+    if (user.totpEnabled && verifyType !== 'TOTP') {
+      throw new ForbiddenException('2FA required');
+    }
+
+    try {
+      if (verifyType === 'TOTP') {
+        await this.twoFA.verify(user.id, token);
+      } else {
+        await this.handleVerifyToken(
+          userId,
+          user.email,
+          token,
+          LoginAttemptType.OTP,
+          AuthTokenType.LOGIN_VERIFY,
+        );
+      }
+    } catch (err) {
+      await this.handleFailedAttempt(user.id, {
+        email: user.email,
+        type: LoginAttemptType.OTP,
+      });
+      throw err;
+    }
 
     const { ip, fingerprint, userAgent } = this.ctx.get();
-    if(!user.emailVerified){
+
+    if (!user.emailVerified) {
       await this.repo.user.markEmailVerified(userId);
     }
 
     await this.repo.user.resetFailedAttempts(user.id);
     await this.repo.user.updateLastLogin(user.id, ip);
 
-    // Device fingerprinting & risk check
+    // --------------------------------------------------
+    // 📱 DEVICE CHECK
+    // --------------------------------------------------
     let device: Device | null = null;
+
     if (fingerprint) {
       device = await this.securityService.resolveDevice({
         userId: user.id,
@@ -134,10 +187,13 @@ export class AuthService {
         ipAddress: ip,
         userAgent,
       });
+
       this.securityService.ensureDeviceAllowed(device);
     }
 
-    // Session creation
+    // --------------------------------------------------
+    // 🧩 SESSION
+    // --------------------------------------------------
     const session = await this.repo.session.create({
       user: { connect: { id: user.id } },
       device: device ? { connect: { id: device.id } } : undefined,
@@ -168,7 +224,9 @@ export class AuthService {
     };
   }
 
-  // Request password reset
+  // --------------------------------------------------
+  // 🔑 PASSWORD RESET REQUEST
+  // --------------------------------------------------
   async requestPasswordReset(email: string) {
     const user = await this.repo.user.findByEmail(email);
     if (!user) return { success: true };
@@ -182,12 +240,14 @@ export class AuthService {
     return { success: true };
   }
 
-  // Confirm password reset
+  // --------------------------------------------------
+  // 🔑 RESET PASSWORD
+  // --------------------------------------------------
   async resetPassword(userId: string, otp: string, newPassword: string) {
     const user = await this.repo.user.findById(userId);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    await this.handleVerifyEmail(
+    await this.handleVerifyToken(
       userId,
       user.email,
       otp,
@@ -196,13 +256,16 @@ export class AuthService {
     );
 
     const passwordHash = await hashPassword(newPassword);
+
     await this.repo.user.updatePassword(userId, passwordHash);
     await this.logoutAll(userId);
 
     return { success: true };
   }
 
-  // Logout
+  // --------------------------------------------------
+  // 🚪 LOGOUT
+  // --------------------------------------------------
   async logout(sessionId: string, userId: string, ip?: string) {
     await this.repo.refreshToken.revokeAllBySession(sessionId);
     await this.repo.session.revoke(sessionId, 'LOGOUT');
@@ -215,7 +278,9 @@ export class AuthService {
     });
   }
 
-  // Logout all sessions
+  // --------------------------------------------------
+  // 🚪 LOGOUT ALL
+  // --------------------------------------------------
   async logoutAll(userId: string) {
     const sessions = await this.repo.session.findByUserId(userId);
 
@@ -230,17 +295,18 @@ export class AuthService {
     await this.audit.logoutAll({ userId });
   }
 
-  // --- Private helpers ---
-
-  private async handleVerifyEmail(
+  // --------------------------------------------------
+  // 🔧 HELPERS
+  // --------------------------------------------------
+  private async handleVerifyToken(
     userId: string,
     email: string,
-    otp: string,
+    token: string,
     attemptType: LoginAttemptType,
     tokenType: AuthTokenType,
   ) {
     try {
-      await this.authTokenService.verifyOTP(userId, otp, tokenType);
+      await this.authTokenService.verifyOTP(userId, token, tokenType);
     } catch (err) {
       await this.handleFailedAttempt(userId, { email, type: attemptType });
       throw err;
@@ -266,12 +332,13 @@ export class AuthService {
 
     if (updated.failedLoginAttempts >= 5) {
       const lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+
       await this.repo.user.lockAccount(userId, lockUntil);
 
       await this.audit.suspiciousActivity({
         userId,
         ipAddress: ip,
-        reasons: ['Account locked due to too many failed attempts'],
+        reasons: ['Too many failed attempts'],
       });
     }
   }
