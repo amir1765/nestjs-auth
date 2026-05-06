@@ -3,7 +3,7 @@ import { Prisma, BackupCode } from '@prisma/client';
 import { PrismaService } from './prisma/prisma.service';
 
 @Injectable()
-export class BackupCodeRepository {
+export class BackupTwoFACodeRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   // ---------- CREATE ----------

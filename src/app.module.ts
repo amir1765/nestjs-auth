@@ -15,6 +15,7 @@ import { IdempotencyModule } from './common/idempotency/idempotency.module';
 import { AuthModule } from './api/auth/auth.module';
 import { RequestContextModule } from './common/request-context/request-context.module';
 import { MailModule } from './common/mail/mail.module';
+import { TwoFAModule } from './api/auth-twofa/twofa.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { MailModule } from './common/mail/mail.module';
     RedisStorageModule,
     //core
     AuthModule,
+    TwoFAModule,
     //common folder for isolated sys which is independent to actual logic but can help the core
     IdempotencyModule,
     RequestContextModule,

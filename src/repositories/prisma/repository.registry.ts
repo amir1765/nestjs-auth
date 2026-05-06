@@ -5,7 +5,7 @@ import { RefreshTokenRepository } from '../refresh-token.repository';
 import { DeviceRepository } from '../device.repository';
 import { ApiKeyRepository } from '../api-key.repository';
 import { AuditLogRepository } from '../audit-log.repository';
-import { BackupCodeRepository } from '../backup-code.repository';
+import { BackupTwoFACodeRepository } from '../backup-code.repository';
 // import { IdempotencyKeyRepository } from '../idempotency-key.repository';
 // import { IdempotencyKeyAnonRepository } from '../idempotency-key-anon.repository';
 import { JwtSecretVersionRepository } from '../jwt-secret-version.repository';
@@ -28,7 +28,7 @@ export class RepositoryRegistry {
     public readonly auditLog: AuditLogRepository,
     public readonly loginAttempt: LoginAttemptRepository,
 
-    public readonly backupCode: BackupCodeRepository,
+    public readonly backupTwoFACode: BackupTwoFACodeRepository,
     public readonly authToken: AuthTokenRepository,
     public readonly jwtSecretVersion: JwtSecretVersionRepository,
 
