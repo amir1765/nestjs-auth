@@ -7,10 +7,11 @@ import { SecurityService } from './security.service';
 import { AppJwtModule } from '../../common/jwt/jwt.module';
 import { AuthTokenService } from './token-auth.service';
 import { MailModule } from '../../common/mail/mail.module';
+import { TwoFAModule } from '../auth-twofa/twofa.module';
 
 
 @Module({
-  imports: [AppJwtModule,MailModule],
+  imports: [AppJwtModule,MailModule,TwoFAModule],
   controllers: [AuthController],
   providers: [ AuthService,TokenService,AuditService,SecurityService,AuthTokenService ],
   exports: [AuthService,TokenService,AuditService,SecurityService,AuthTokenService ],

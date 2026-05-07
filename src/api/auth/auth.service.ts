@@ -81,6 +81,12 @@ export class AuthService {
   // 🔐 LOGIN STEP 1
   // --------------------------------------------------
   async login(params: { email: string; password: string }) {
+    await this.redis.authLimit.consume(
+      `login:${params.email}`,
+      'LOGIN',
+      this.LIMITS.LOGIN,
+    );
+
     const user = await this.repo.user.findByEmail(params.email);
     const { ip, userAgent } = this.ctx.get();
 
@@ -107,6 +113,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    await this.redis.authLimit.reset(
+      `login:${params.email}`,
+      'LOGIN',
+    );
     // ✅ 2FA ENABLED → REQUIRE TOTP
     if (user.totpEnabled) {
       return {
@@ -138,6 +148,11 @@ export class AuthService {
     token: string,
     verifyType: VerifyType,
   ): Promise<LoginOutput> {
+    await this.redis.authLimit.consume(
+      `verify-login:${userId}`,
+      'VERIFY_LOGIN',
+      this.LIMITS.VERIFY,
+    );
     const user = await this.repo.user.findById(userId);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
@@ -211,7 +226,10 @@ export class AuthService {
       ipAddress: ip,
       userAgent,
     });
-
+    await this.redis.authLimit.reset(
+      `verify-login:${userId}`,
+      'VERIFY_LOGIN',
+    );
     return {
       ...tokens,
       user: {
@@ -244,6 +262,11 @@ export class AuthService {
   // 🔑 RESET PASSWORD
   // --------------------------------------------------
   async resetPassword(userId: string, otp: string, newPassword: string) {
+    await this.redis.authLimit.consume(
+      `reset-password:${userId}`,
+      'VERIFY_RESET_PASSWORD',
+      this.LIMITS.RESET_PASSWORD,
+    );
     const user = await this.repo.user.findById(userId);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
@@ -259,7 +282,10 @@ export class AuthService {
 
     await this.repo.user.updatePassword(userId, passwordHash);
     await this.logoutAll(userId);
-
+    await this.redis.authLimit.reset(
+      `reset-password:${userId}`,
+      'VERIFY_RESET_PASSWORD',
+    );
     return { success: true };
   }
 
@@ -348,4 +374,20 @@ export class AuthService {
     date.setDate(date.getDate() + 7);
     return date;
   }
+  private readonly LIMITS = {
+    LOGIN: {
+      ttlMs: 15 * 60 * 1000,
+      maxAttempts: 5,
+    },
+
+    VERIFY: {
+      ttlMs: 10 * 60 * 1000,
+      maxAttempts: 5,
+    },
+
+    RESET_PASSWORD: {
+      ttlMs: 10 * 60 * 1000,
+      maxAttempts: 5,
+    },
+  };
 }

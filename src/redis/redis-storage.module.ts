@@ -3,7 +3,8 @@ import {  RateLimitStore } from './storage/rate-limit.redis.repository';
 import { RedisStorageRegistry } from './redis-storage.registry';
 import { IdempotencyStore } from './storage/idempotency.redis.repository';
 import { SessionStore } from './storage/session.redis.repository';
-import { EmailLimitStore } from './storage/rate-limit-email.repository';
+import { EmailLimitStore } from './storage/rate-limit-email.redis.repository';
+import { AuthLimitStore } from './storage/auth-limit.redis.repository';
 
 @Global()
 @Module({
@@ -12,7 +13,8 @@ import { EmailLimitStore } from './storage/rate-limit-email.repository';
     RateLimitStore,
     IdempotencyStore,
     SessionStore,
-    EmailLimitStore
+    EmailLimitStore,
+    AuthLimitStore
   ],
   exports: [RedisStorageRegistry],
 })
