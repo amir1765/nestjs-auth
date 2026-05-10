@@ -1,19 +1,22 @@
 import {
   Body,
   Controller,
-  Post,
+  Post, UseGuards,
 } from '@nestjs/common';
 
 import {
   ApiTags,
   ApiOperation,
-  ApiResponse,
+  ApiResponse, ApiBearerAuth,
 } from '@nestjs/swagger';
 
 import { TwoFAService } from './twofa.service';
 
 import { Generate2FADto,Enable2FADto, Verify2FADto, Disable2FADto } from 'src/common/dto';
+import { JwtAuthGuard } from 'src/guards/jwt-auth.guard';
 
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 @ApiTags('2FA')
 @Controller('2fa')
 export class TwoFAController {
