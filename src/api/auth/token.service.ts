@@ -1,4 +1,4 @@
-// token.service.ts all done I guess
+// token.service.ts
 
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -8,7 +8,7 @@ import { generateSecureToken, hashToken } from '../../common/crypto';
 import { ConfigService } from '@nestjs/config';
 import { AuditService } from './audit.service';
 import { RequestContextService } from '../../common/request-context/request-context.service';
-
+import { PrismaService } from 'src/repositories/prisma/prisma.service';
 
 @Injectable()
 export class TokenService {
@@ -18,6 +18,7 @@ export class TokenService {
     private readonly config: ConfigService,
     private readonly audit: AuditService,
     private readonly ctx: RequestContextService,
+    private readonly prisma: PrismaService,
   ) {}
 
   // ===============================
@@ -45,82 +46,107 @@ export class TokenService {
   }
 
   // ===============================
-  // 🔁 ROTATE TOKEN
+  // 🔁 ROTATE TOKEN (SAFE)
   // ===============================
   async rotateRefreshToken(rawToken: string) {
-
     const tokenHash = hashToken(rawToken);
 
-    const token = await this.repo.refreshToken.findByTokenHash(tokenHash);
-
-    if (!token  ) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
-
-    const fullToken = await this.repo.refreshToken.findWithChain(token.id);
-
-    if (!fullToken) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
-    if (fullToken.session.isRevoked) {
-      throw new UnauthorizedException('Session revoked');
-    }
     const { ip, userAgent } = this.ctx.get();
-    //  REUSE DETECTION
 
-    if (fullToken.revokedAt) {
-      if (fullToken.children.length > 0) {
-        // 🔥 ATTACK DETECTED
+    return this.prisma.$transaction(async (tx) => {
+      // Find token
+      const token = await tx.refreshToken.findUnique({
+        where: {
+          tokenHash,
+        },
+        include: {
+          session: true,
+          children: true,
+        },
+      });
 
-        await this.handleReuseAttack(fullToken.sessionId);
-        await this.audit.tokenReuseDetected({userId: fullToken.session.userId,sessionId: fullToken.session.id,ipAddress: ip, userAgent })
+      if (!token) {
+        throw new UnauthorizedException('Invalid refresh token');
       }
 
-      throw new UnauthorizedException('Token already used');
-    }
+      if (token.session.isRevoked) {
+        throw new UnauthorizedException('Session revoked');
+      }
 
-    if (fullToken.expiresAt < new Date()) {
-      throw new UnauthorizedException('Token expired');
-    }
+      // Expired
+      if (token.expiresAt < new Date()) {
+        throw new UnauthorizedException('Token expired');
+      }
 
+      // Reuse detection
+      if (token.revokedAt) {
+        if (token.children.length > 0) {
+          await this.handleReuseAttack(token.sessionId);
 
-    //  REVOKE CURRENT TOKEN
+          await this.audit.tokenReuseDetected({
+            userId: token.session.userId,
+            sessionId: token.session.id,
+            ipAddress: ip,
+            userAgent,
+          });
+        }
 
-    await this.repo.refreshToken.revoke(fullToken.id);
+        throw new UnauthorizedException('Token already used');
+      }
 
+      // ===============================
+      // ATOMIC REVOKE
+      // ===============================
 
-    // CREATE NEW TOKEN (CHAIN)
+      const revokeResult = await tx.refreshToken.updateMany({
+        where: {
+          id: token.id,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: new Date(),
+        },
+      });
 
-    const newRaw = generateSecureToken();
-    const newHash = hashToken(newRaw);
+      // Another request already used it
+      if (revokeResult.count !== 1) {
+        throw new UnauthorizedException('Token already used');
+      }
 
-    await this.repo.refreshToken.createRotatedToken({
-      sessionId: fullToken.sessionId,
-      tokenHash: newHash,
-      jti: generateSecureToken(16),
-      parentTokenId: fullToken.id,
-      expiresAt: this.getRefreshExpiry(),
+      // ===============================
+      // CREATE NEW TOKEN
+      // ===============================
+
+      const newRaw = generateSecureToken();
+      const newHash = hashToken(newRaw);
+
+      await tx.refreshToken.create({
+        data: {
+          sessionId: token.sessionId,
+          tokenHash: newHash,
+          jti: generateSecureToken(16),
+          parentTokenId: token.id,
+          expiresAt: this.getRefreshExpiry(),
+        },
+      });
+
+      const accessToken = await this.signAccessToken(
+        token.session.userId,
+        token.sessionId,
+      );
+
+      return {
+        accessToken,
+        refreshToken: newRaw,
+      };
     });
-
-    const accessToken = await this.signAccessToken(
-      fullToken.session.userId,
-      fullToken.sessionId,
-    );
-
-    return {
-      accessToken,
-      refreshToken: newRaw,
-    };
   }
 
   // ===============================
   // 🚨 HANDLE REUSE ATTACK
   // ===============================
   private async handleReuseAttack(sessionId: string) {
-    // revoke all tokens
     await this.repo.refreshToken.revokeAllBySession(sessionId);
-
-    // revoke session
     await this.repo.session.update(sessionId, {
       isRevoked: true,
     });
@@ -137,13 +163,13 @@ export class TokenService {
         jti: generateSecureToken(16),
       },
       {
-        expiresIn: this.config.get<number>('JWT_ACCESS_EXPIRES') ?? 900
+        expiresIn: this.config.get<number>('JWT_ACCESS_EXPIRES') ?? 900,
       },
     );
   }
 
   private getRefreshExpiry() {
-    const days = this.config.get<number>('JWT_REFRESH_EXPIRES') ?? 7; // fallback to 7 days
+    const days = this.config.get<number>('JWT_REFRESH_EXPIRES') ?? 7;
     const date = new Date();
     date.setDate(date.getDate() + days);
     return date;

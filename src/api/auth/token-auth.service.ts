@@ -1,5 +1,11 @@
-import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
+
 import { AuthTokenType } from '@prisma/client';
+
 import { MailService } from 'src/common/mail/mail.service';
 import { RepositoryRegistry } from '../../repositories/prisma/repository.registry';
 import { generateOTP, hashToken } from '../../common/crypto';
@@ -12,7 +18,6 @@ export class AuthTokenService {
     private readonly repo: RepositoryRegistry,
     private readonly mailService: MailService,
     private readonly redis: RedisStorageRegistry,
-
     private readonly ctx: RequestContextService,
   ) {}
 
@@ -45,15 +50,38 @@ export class AuthTokenService {
     switch (type) {
       case 'EMAIL_VERIFY':
         return 'Verify your email';
+
       case 'PASSWORD_RESET':
         return 'Reset your password';
+
       case 'LOGIN_VERIFY':
         return 'Verify your login attempt';
+
       case 'MAGIC_LOGIN':
         return 'Your magic login code';
+
       default:
         return 'Your verification code';
     }
+  }
+
+  // ===============================
+  // 🔒 VERIFY BRUTE FORCE PROTECTION
+  // ===============================
+  private async checkVerifyRateLimit(
+    userId: string,
+    ip: string,
+    type: AuthTokenType,
+  ) {
+    // per-user limit
+    await this.redis.otpVerifyLimit.increment(
+      `user:${userId}:${type}`,
+      600, // 10 min
+      10,
+    );
+
+    // per-ip limit
+    await this.redis.otpVerifyLimit.increment(`ip:${ip}:${type}`, 600, 30);
   }
 
   // ===============================
@@ -65,31 +93,43 @@ export class AuthTokenService {
     type: AuthTokenType,
   ): Promise<void> {
     const otp = generateOTP();
+
     const tokenHash = hashToken(otp);
+
     const expiryDate = this.getExpiryByType(type);
+
     const ttlMs = expiryDate.getTime() - Date.now();
-    await this.redis.emailLimit.increment(userId, type, ttlMs, 1);
-    // 🔥 delete old tokens of same type
+
+    // send rate limit
+    await this.redis.emailLimit.increment(userId, type, ttlMs, 5);
+
+    // delete old tokens of same type
     await this.repo.authToken.deleteByUserAndType(userId, type);
+
     const { ip, userAgent, fingerprint } = this.ctx.get();
 
+    await this.repo.authToken.create({
+      user: {
+        connect: { id: userId },
+      },
 
-    await this.repo.authToken.create({  user: {
-          connect: { id: userId },
-        },
       tokenHash,
       type,
       ip,
       userAgent,
       fingerprint,
-      expiresAt:expiryDate}
-
-    );
+      expiresAt: expiryDate,
+    });
 
     await this.mailService.sendMail({
       to: email,
       subject: this.getSubject(type),
-      html: `<h3>Your OTP code: ${otp}</h3>`,
+      html: `
+        <div>
+          <h2>Your verification code</h2>
+          <p>${otp}</p>
+        </div>
+      `,
     });
   }
 
@@ -100,37 +140,47 @@ export class AuthTokenService {
     userId: string,
     otp: string,
     type: AuthTokenType,
-  ): Promise<true|void> {
+  ): Promise<true> {
     const { ip, fingerprint } = this.ctx.get();
+
+    // brute-force protection
+    await this.checkVerifyRateLimit(userId, ip, type);
 
     const tokenHash = hashToken(otp);
 
-    const token = await this.repo.authToken.findByHash(tokenHash);
+    const token = await this.repo.authToken.findValidToken(userId, type);
 
-
-    if (token?.ip !== ip || (token?.fingerprint !== null && token?.fingerprint !== fingerprint)) {
-      throw new ForbiddenException('OTP context mismatch');
+    if (!token) {
+      throw new BadRequestException('Invalid or expired OTP');
     }
 
-    if (!token || token.userId !== userId || token.type !== type) {
+    // compare hash manually
+    if (token.tokenHash !== tokenHash) {
       throw new BadRequestException('Invalid OTP');
     }
 
-    if (token.usedAt) {
-      throw new BadRequestException('OTP already used');
+    // context validation
+    if (
+      token.ip !== ip ||
+      (token.fingerprint !== null && token.fingerprint !== fingerprint)
+    ) {
+      throw new ForbiddenException('OTP context mismatch');
     }
 
-    if (token.expiresAt < new Date()) {
-      throw new BadRequestException('OTP expired');
-    }
-
+    // atomic consume
     const consumed = await this.repo.authToken.consume(tokenHash);
 
     if (!consumed) {
-      throw new BadRequestException('OTP already used or invalid');
+      throw new BadRequestException('OTP already used or expired');
     }
+
+    // reset limits after success
     await this.redis.emailLimit.reset(userId, type);
+
+    await this.redis.otpVerifyLimit.reset(`user:${userId}:${type}`);
+
+    await this.redis.otpVerifyLimit.reset(`ip:${ip}:${type}`);
+
     return true;
   }
-
 }

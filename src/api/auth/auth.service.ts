@@ -17,6 +17,7 @@ import { AuthTokenService } from './token-auth.service';
 import { TokenService } from './token.service';
 import { LoginOutput } from '../../common/interface/auth/registerService';
 import { TwoFAService } from '../auth-twofa/twofa.service';
+import { PrismaService } from '../../repositories/prisma/prisma.service';
 
 type VerifyType = 'OTP' | 'TOTP';
 
@@ -31,6 +32,7 @@ export class AuthService {
     private readonly ctx: RequestContextService,
     private readonly authTokenService: AuthTokenService,
     private readonly twoFA: TwoFAService,
+    private readonly prisma: PrismaService,
   ) {}
 
   // --------------------------------------------------
@@ -206,22 +208,34 @@ export class AuthService {
       this.securityService.ensureDeviceAllowed(device);
     }
 
-    // --------------------------------------------------
-    // 🧩 SESSION
-    // --------------------------------------------------
-    const session = await this.repo.session.create({
-      user: { connect: { id: user.id } },
-      device: device ? { connect: { id: device.id } } : undefined,
-      ipAddress: ip,
-      userAgent,
-      expiresAt: this.getSessionExpiry(),
-    });
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        const session =
+          await tx.session.create({
+            data: {
+              userId: user.id,
+              deviceId: device?.id,
+              ipAddress: ip,
+              userAgent,
+              expiresAt: this.getSessionExpiry(), // also absolute expiry
+            },
+          });
 
-    const tokens = await this.tokenService.issueTokens(user.id, session.id);
+        const tokens =
+          await this.tokenService.issueTokens(
+            user.id,
+            session.id,
+          );
 
+        return {
+          session,
+          tokens,
+        };
+      },
+    );
     await this.audit.loginSuccess({
       userId: user.id,
-      sessionId: session.id,
+      sessionId: result.session.id,
       deviceId: device?.id,
       ipAddress: ip,
       userAgent,
@@ -231,7 +245,7 @@ export class AuthService {
       'VERIFY_LOGIN',
     );
     return {
-      ...tokens,
+      ...result.tokens,
       user: {
         id: user.id,
         email: user.email,
@@ -278,6 +292,9 @@ export class AuthService {
       AuthTokenType.PASSWORD_RESET,
     );
 
+    if (!validatePassword(newPassword)) {
+      throw new UnauthorizedException('Weak password');
+    }
     const passwordHash = await hashPassword(newPassword);
 
     await this.repo.user.updatePassword(userId, passwordHash);

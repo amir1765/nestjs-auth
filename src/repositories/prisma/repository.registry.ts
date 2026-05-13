@@ -30,7 +30,7 @@ export class RepositoryRegistry {
 
     public readonly backupTwoFACode: BackupTwoFACodeRepository,
     public readonly authToken: AuthTokenRepository,
-    public readonly jwtSecretVersion: JwtSecretVersionRepository,
+   // public readonly jwtSecretVersion: JwtSecretVersionRepository,
 
     public readonly permission: PermissionRepository,
     public readonly role: RoleRepository,

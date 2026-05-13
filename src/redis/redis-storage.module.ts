@@ -5,6 +5,7 @@ import { IdempotencyStore } from './storage/idempotency.redis.repository';
 import { SessionStore } from './storage/session.redis.repository';
 import { EmailLimitStore } from './storage/rate-limit-email.redis.repository';
 import { AuthLimitStore } from './storage/auth-limit.redis.repository';
+import { OTPVerifyLimitStore } from './storage/otp-verify-limit.store';
 
 @Global()
 @Module({
@@ -14,7 +15,9 @@ import { AuthLimitStore } from './storage/auth-limit.redis.repository';
     IdempotencyStore,
     SessionStore,
     EmailLimitStore,
+    OTPVerifyLimitStore,
     AuthLimitStore
+
   ],
   exports: [RedisStorageRegistry],
 })
