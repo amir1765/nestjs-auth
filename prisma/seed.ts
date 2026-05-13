@@ -1,57 +1,156 @@
 // prisma/seed.ts
+
 import { PrismaClient, RoleName } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import * as dotenv from 'dotenv';
 
-dotenv.config(); // Load .env for DATABASE_URL if needed
+dotenv.config();
 
 const prisma = new PrismaClient();
 
-// Define all permissions (resource:action)
-const PERMISSIONS = [
-  // User management
-  { name: 'user:read', resource: 'user', action: 'read', description: 'View user profiles' },
-  { name: 'user:create', resource: 'user', action: 'create', description: 'Create new users' },
-  { name: 'user:update', resource: 'user', action: 'update', description: 'Update user details' },
-  { name: 'user:delete', resource: 'user', action: 'delete', description: 'Delete users' },
-  // Payment
-  { name: 'payment:create', resource: 'payment', action: 'create', description: 'Initiate payments' },
-  { name: 'payment:read', resource: 'payment', action: 'read', description: 'View payment history' },
-  { name: 'payment:refund', resource: 'payment', action: 'refund', description: 'Process refunds' },
-  // Admin
-  { name: 'admin:access', resource: 'admin', action: 'access', description: 'Access admin panel' },
-  { name: 'admin:audit', resource: 'admin', action: 'audit', description: 'View audit logs' },
-  // API keys
-  { name: 'apikey:manage', resource: 'apikey', action: 'manage', description: 'Create/revoke API keys' },
-  // Webhook
-  { name: 'webhook:manage', resource: 'webhook', action: 'manage', description: 'Manage webhooks' },
-];
+/**
+ * ---------------------------------------------------
+ * Permissions
+ * ---------------------------------------------------
+ */
 
-// Map roles to permissions
+const PERMISSIONS = [
+  // Users
+  {
+    name: 'user:create',
+    resource: 'user',
+    action: 'create',
+    description: 'Create users',
+  },
+  {
+    name: 'user:read',
+    resource: 'user',
+    action: 'read',
+    description: 'Read users',
+  },
+  {
+    name: 'user:update',
+    resource: 'user',
+    action: 'update',
+    description: 'Update users',
+  },
+  {
+    name: 'user:delete',
+    resource: 'user',
+    action: 'delete',
+    description: 'Delete users',
+  },
+
+  // Payments
+  {
+    name: 'payment:create',
+    resource: 'payment',
+    action: 'create',
+    description: 'Create payments',
+  },
+  {
+    name: 'payment:read',
+    resource: 'payment',
+    action: 'read',
+    description: 'Read payments',
+  },
+  {
+    name: 'payment:refund',
+    resource: 'payment',
+    action: 'refund',
+    description: 'Refund payments',
+  },
+
+  // Admin
+  {
+    name: 'admin:access',
+    resource: 'admin',
+    action: 'access',
+    description: 'Access admin panel',
+  },
+  {
+    name: 'admin:audit',
+    resource: 'admin',
+    action: 'audit',
+    description: 'Access audit logs',
+  },
+
+  // API Keys
+  {
+    name: 'apikey:create',
+    resource: 'apikey',
+    action: 'create',
+    description: 'Create API keys',
+  },
+  {
+    name: 'apikey:revoke',
+    resource: 'apikey',
+    action: 'revoke',
+    description: 'Revoke API keys',
+  },
+
+  // Webhooks
+  {
+    name: 'webhook:create',
+    resource: 'webhook',
+    action: 'create',
+    description: 'Create webhooks',
+  },
+  {
+    name: 'webhook:update',
+    resource: 'webhook',
+    action: 'update',
+    description: 'Update webhooks',
+  },
+  {
+    name: 'webhook:delete',
+    resource: 'webhook',
+    action: 'delete',
+    description: 'Delete webhooks',
+  },
+] as const;
+
+/**
+ * ---------------------------------------------------
+ * Role -> Permission Mapping
+ * ---------------------------------------------------
+ */
+
 const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
-  ADMIN: [
-    'user:read', 'user:create', 'user:update', 'user:delete',
-    'payment:create', 'payment:read', 'payment:refund',
-    'admin:access', 'admin:audit',
-    'apikey:manage', 'webhook:manage',
-  ],
+  ADMIN: PERMISSIONS.map((p) => p.name),
+
   USER: [
-    'user:read',               // can view own profile
-    'payment:create', 'payment:read',
+    'user:read',
+    'payment:create',
+    'payment:read',
   ],
+
   MERCHANT: [
-    'user:read',               // own profile
-    'payment:create', 'payment:read', 'payment:refund',
-    'apikey:manage',           // can generate API keys for POS
-    'webhook:manage',          // set up webhooks for payment events
+    'user:read',
+
+    'payment:create',
+    'payment:read',
+    'payment:refund',
+
+    'apikey:create',
+    'apikey:revoke',
+
+    'webhook:create',
+    'webhook:update',
+    'webhook:delete',
   ],
 };
 
-// Default users to create (passwords will be hashed)
+/**
+ * ---------------------------------------------------
+ * Default Seed Users
+ * ---------------------------------------------------
+ */
+
 const DEFAULT_USERS = [
   {
-    email: 'admin@example.com',
-    password: 'Admin123!',
+    email: process.env.ADMIN_EMAIL || 'admin@example.com',
+    password: process.env.ADMIN_PASSWORD || 'Admin123!',
     fullName: 'System Admin',
     role: RoleName.ADMIN,
   },
@@ -69,116 +168,201 @@ const DEFAULT_USERS = [
   },
 ];
 
+/**
+ * ---------------------------------------------------
+ * Main Seeder
+ * ---------------------------------------------------
+ */
+
 async function main() {
-  console.log('🌱 Seeding database...');
+  console.log('\n🌱 Starting database seed...\n');
 
-  // 1. Seed roles
-  console.log('Seeding roles...');
-  for (const roleName of Object.values(RoleName)) {
-    await prisma.role.upsert({
-      where: { name: roleName },
-      update: {}, // nothing to update
-      create: {
-        name: roleName,
-        description: `${roleName} role`,
-      },
-    });
-  }
+  await prisma.$transaction(async (tx) => {
+    /**
+     * ---------------------------------------------------
+     * Seed Roles
+     * ---------------------------------------------------
+     */
 
-  // 2. Seed permissions
-  console.log('Seeding permissions...');
-  for (const perm of PERMISSIONS) {
-    await prisma.permission.upsert({
-      where: { name: perm.name },
-      update: {
-        resource: perm.resource,
-        action: perm.action,
-        description: perm.description,
-      },
-      create: {
-        name: perm.name,
-        resource: perm.resource,
-        action: perm.action,
-        description: perm.description,
-      },
-    });
-  }
+    console.log('📌 Seeding roles...');
 
-  // 3. Assign permissions to roles
-  console.log('Assigning permissions to roles...');
-  const allRoles = await prisma.role.findMany();
-  const allPermissions = await prisma.permission.findMany();
-
-  const permissionMap = new Map(allPermissions.map(p => [p.name, p.id]));
-  const roleMap = new Map(allRoles.map(r => [r.name, r.id]));
-
-  const rolePermissionData: { roleId: string; permissionId: string }[] = [];
-  for (const [roleName, permNames] of Object.entries(ROLE_PERMISSIONS)) {
-    const roleId = roleMap.get(roleName as RoleName);
-    if (!roleId) continue;
-    for (const permName of permNames) {
-      const permId = permissionMap.get(permName);
-      if (permId) {
-        rolePermissionData.push({ roleId, permissionId: permId });
-      }
-    }
-  }
-
-  // Use createMany with skipDuplicates to avoid errors on re-run
-  if (rolePermissionData.length > 0) {
-    await prisma.rolePermission.createMany({
-      data: rolePermissionData,
-      skipDuplicates: true,
-    });
-  }
-
-  // 4. Seed users and assign roles
-  console.log('Seeding users...');
-  for (const userData of DEFAULT_USERS) {
-    const hashedPassword = await bcrypt.hash(userData.password, 12);
-
-    const user = await prisma.user.upsert({
-      where: { email: userData.email },
-      update: {
-        // If user exists, we do not overwrite password or roles for safety.
-        // You can update fullName if needed.
-        fullName: userData.fullName,
-      },
-      create: {
-        email: userData.email,
-        passwordHash: hashedPassword,
-        fullName: userData.fullName,
-        emailVerified: true, // default true for seed users
-      },
-    });
-
-    // Assign role if not already assigned
-    const roleId = roleMap.get(userData.role);
-    if (roleId) {
-      // Ensure the user has this role (idempotent)
-      await prisma.userRole.upsert({
+    for (const roleName of Object.values(RoleName)) {
+      await tx.role.upsert({
         where: {
-          userId_roleId: {
-            userId: user.id,
-            roleId: roleId,
-          },
+          name: roleName,
         },
-        update: {}, // nothing to change
+        update: {
+          description: `${roleName} role`,
+        },
         create: {
-          userId: user.id,
-          roleId: roleId,
-          assignedBy: 'seed',
+          name: roleName,
+          description: `${roleName} role`,
         },
       });
     }
-  }
 
-  console.log('✅ Seeding complete!');
+    /**
+     * ---------------------------------------------------
+     * Seed Permissions
+     * ---------------------------------------------------
+     */
+
+    console.log('📌 Seeding permissions...');
+
+    for (const permission of PERMISSIONS) {
+      await tx.permission.upsert({
+        where: {
+          name: permission.name,
+        },
+        update: {
+          resource: permission.resource,
+          action: permission.action,
+          description: permission.description,
+        },
+        create: permission,
+      });
+    }
+
+    /**
+     * ---------------------------------------------------
+     * Fetch Roles & Permissions
+     * ---------------------------------------------------
+     */
+
+    const roles = await tx.role.findMany();
+    const permissions = await tx.permission.findMany();
+
+    const roleMap = new Map(
+      roles.map((role) => [role.name, role.id]),
+    );
+
+    const permissionMap = new Map(
+      permissions.map((permission) => [
+        permission.name,
+        permission.id,
+      ]),
+    );
+
+    /**
+     * ---------------------------------------------------
+     * Assign Permissions To Roles
+     * ---------------------------------------------------
+     */
+
+    console.log('📌 Assigning permissions to roles...');
+
+    for (const [roleName, permissionNames] of Object.entries(
+      ROLE_PERMISSIONS,
+    )) {
+      const roleId = roleMap.get(roleName as RoleName);
+
+      if (!roleId) continue;
+
+      for (const permissionName of permissionNames) {
+        const permissionId = permissionMap.get(permissionName);
+
+        if (!permissionId) {
+          console.warn(
+            `⚠️ Permission not found: ${permissionName}`,
+          );
+          continue;
+        }
+
+        await tx.rolePermission.upsert({
+          where: {
+            roleId_permissionId: {
+              roleId,
+              permissionId,
+            },
+          },
+          update: {},
+          create: {
+            roleId,
+            permissionId,
+          },
+        });
+      }
+    }
+
+    /**
+     * ---------------------------------------------------
+     * Seed Users
+     * ---------------------------------------------------
+     */
+
+    console.log('📌 Seeding users...');
+
+    for (const seedUser of DEFAULT_USERS) {
+      const existingUser = await tx.user.findUnique({
+        where: {
+          email: seedUser.email,
+        },
+      });
+
+      let userId: string;
+
+      if (!existingUser) {
+        const passwordHash = await bcrypt.hash(
+          seedUser.password,
+          12,
+        );
+
+        const createdUser = await tx.user.create({
+          data: {
+            email: seedUser.email,
+            passwordHash,
+            fullName: seedUser.fullName,
+            emailVerified: true,
+          },
+        });
+
+        userId = createdUser.id;
+
+        console.log(`✅ Created user: ${seedUser.email}`);
+      } else {
+        userId = existingUser.id;
+
+        console.log(`↩️ User exists: ${seedUser.email}`);
+      }
+
+      /**
+       * Assign Role
+       */
+
+      const roleId = roleMap.get(seedUser.role);
+
+      if (!roleId) continue;
+
+      await tx.userRole.upsert({
+        where: {
+          userId_roleId: {
+            userId,
+            roleId,
+          },
+        },
+        update: {},
+        create: {
+          userId,
+          roleId,
+          assignedBy: 'system_seed',
+        },
+      });
+    }
+  });
+
+  console.log('\n✅ Database seeding completed.\n');
 }
 
+/**
+ * ---------------------------------------------------
+ * Execute
+ * ---------------------------------------------------
+ */
+
 main()
-  .catch((e) => {
-    console.error('❌ Seed error:', e);
+  .catch((error) => {
+    console.error('\n❌ Seed failed:\n', error);
+
     process.exit(1);
   })
   .finally(async () => {
