@@ -1,7 +1,7 @@
 import {
   Body,
   Controller,
-  Post, UseGuards,
+  Post, UseGuards,Req,
 } from '@nestjs/common';
 
 import {
@@ -31,8 +31,10 @@ export class TwoFAController {
     status: 200,
     description: 'Returns QR + temp secret',
   })
-  async generate(@Body() dto: Generate2FADto) {
-    return this.twoFAService.generateSetup(dto.userId, dto.email);
+  async generate(@Req() req: Request,@Body() dto: Generate2FADto) {
+    const userId = req['user'].sub;
+
+    return this.twoFAService.generateSetup(userId, dto.email);
   }
 
   // --------------------------------------------------
@@ -40,9 +42,10 @@ export class TwoFAController {
   // --------------------------------------------------
   @Post('enable')
   @ApiOperation({ summary: 'Enable 2FA after verifying OTP' })
-  async enable(@Body() dto: Enable2FADto) {
+  async enable(@Req() req: Request,@Body() dto: Enable2FADto) {
+    const userId = req['user'].sub;
     return this.twoFAService.enable(
-      dto.userId,
+      userId,
       dto.token,
       dto.tempSecret,
     );
@@ -53,8 +56,10 @@ export class TwoFAController {
   // --------------------------------------------------
   @Post('verify')
   @ApiOperation({ summary: 'Verify TOTP or backup code' })
-  async verify(@Body() dto: Verify2FADto) {
-    return this.twoFAService.verify(dto.userId, dto.token);
+  async verify(@Req() req: Request,@Body() dto: Verify2FADto) {
+    const userId = req['user'].sub;
+
+    return this.twoFAService.verify(userId, dto.token);
   }
 
   // --------------------------------------------------
@@ -62,9 +67,11 @@ export class TwoFAController {
   // --------------------------------------------------
   @Post('disable')
   @ApiOperation({ summary: 'Disable 2FA' })
-  async disable(@Body() dto: Disable2FADto) {
+  async disable(@Req() req: Request,@Body() dto: Disable2FADto) {
+    const userId = req['user'].sub;
+
     return this.twoFAService.disable(
-      dto.userId,
+      userId,
       dto.token,
     );
   }

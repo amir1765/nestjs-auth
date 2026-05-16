@@ -1,8 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class Enable2FADto {
-  @ApiProperty()
-  userId!: string;
+
 
   @ApiProperty({
     example: '123456',
