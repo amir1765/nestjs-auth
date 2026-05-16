@@ -220,12 +220,11 @@ export class AuthService {
               expiresAt: this.getSessionExpiry(), // also absolute expiry
             },
           });
-
-        const tokens =
-          await this.tokenService.issueTokens(
-            user.id,
-            session.id,
-          );
+        const tokens = await this.tokenService.issueTokens(
+          user.id,
+          session.id,
+          tx,
+        );
 
         return {
           session,

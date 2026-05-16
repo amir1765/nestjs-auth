@@ -7,8 +7,9 @@ export class RefreshTokenRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   // ---------- CREATE ----------
-  async create(data: Prisma.RefreshTokenCreateInput): Promise<RefreshToken> {
-    return this.prisma.refreshToken.create({ data });
+  async create(data: Prisma.RefreshTokenCreateInput, tx?: Prisma.TransactionClient): Promise<RefreshToken> {
+    const prisma = tx ?? this.prisma;
+    return prisma.refreshToken.create({ data });
   }
 
   /**

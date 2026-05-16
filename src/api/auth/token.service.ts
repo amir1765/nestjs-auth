@@ -2,7 +2,7 @@
 
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-
+import { Prisma } from '@prisma/client';
 import { RepositoryRegistry } from 'src/repositories/prisma/repository.registry';
 import { generateSecureToken, hashToken } from '../../common/crypto';
 import { ConfigService } from '@nestjs/config';
@@ -24,18 +24,25 @@ export class TokenService {
   // ===============================
   // 🔐 ISSUE TOKENS
   // ===============================
-  async issueTokens(userId: string, sessionId: string) {
+  async issueTokens(
+    userId: string,
+    sessionId: string,
+    tx?: Prisma.TransactionClient,
+  ) {
     const raw = generateSecureToken();
     const hash = hashToken(raw);
 
     const jti = generateSecureToken(16);
 
-    await this.repo.refreshToken.create({
-      session: { connect: { id: sessionId } },
-      tokenHash: hash,
-      jti,
-      expiresAt: this.getRefreshExpiry(),
-    });
+    await this.repo.refreshToken.create(
+      {
+        session: { connect: { id: sessionId } },
+        tokenHash: hash,
+        jti,
+        expiresAt: this.getRefreshExpiry(),
+      },
+      tx,
+    );
 
     const accessToken = await this.signAccessToken(userId, sessionId);
 
