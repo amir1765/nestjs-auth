@@ -1,12 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsNotEmpty, IsString, Length } from 'class-validator';
 
 export class Generate2FADto {
   @ApiProperty({
-    example: 'user-id-123',
-    description: 'User ID requesting 2FA setup',
+    description: 'One-time password (OTP or 2FA code)',
+    example: '123456',
   })
-  userId!: string;
-
+  @IsString()
+  @IsNotEmpty()
+  @Length(6, 6, { message: 'Code must be exactly 6 characters' })
+  otp!: string;
   @ApiProperty({
     example: 'user@email.com',
     description: 'User email for QR label',

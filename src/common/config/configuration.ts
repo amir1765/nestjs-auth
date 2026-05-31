@@ -11,6 +11,10 @@ export default () => ({
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET,
   },
+  God: {
+    email: process.env.ADMIN_EMAIL,
+    password: process.env.ADMIN_PASSWORD,
+  },
   encryption: {
     CRYPTO_SECRET:process.env.CRYPTO_SECRET,
   }

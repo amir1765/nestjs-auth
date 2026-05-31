@@ -4,7 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 
-import { AuthTokenType } from '@prisma/client';
+import { EmailOTPType } from '@prisma/client';
 
 import { MailService } from 'src/common/mail/mail.service';
 import { RepositoryRegistry } from '../../repositories/prisma/repository.registry';
@@ -13,7 +13,7 @@ import { RequestContextService } from '../../common/request-context/request-cont
 import { RedisStorageRegistry } from '../../redis/redis-storage.registry';
 
 @Injectable()
-export class AuthTokenService {
+export class EmailOTPTokenService {
   constructor(
     private readonly repo: RepositoryRegistry,
     private readonly mailService: MailService,
@@ -24,7 +24,7 @@ export class AuthTokenService {
   // ===============================
   // ⏳ EXPIRY PER TYPE
   // ===============================
-  private getExpiryByType(type: AuthTokenType): Date {
+  private getExpiryByType(type: EmailOTPType): Date {
     switch (type) {
       case 'EMAIL_VERIFY':
         return new Date(Date.now() + 15 * 60 * 1000);
@@ -38,6 +38,12 @@ export class AuthTokenService {
       case 'MAGIC_LOGIN':
         return new Date(Date.now() + 3 * 60 * 1000);
 
+      case 'ENABLE_2FA':
+        return new Date(Date.now() + 5 * 60 * 1000);
+
+      case 'DISABLE_2FA':
+        return new Date(Date.now() + 5 * 60 * 1000);
+
       default:
         return new Date(Date.now() + 10 * 60 * 1000);
     }
@@ -46,7 +52,7 @@ export class AuthTokenService {
   // ===============================
   // 📧 SUBJECT PER TYPE
   // ===============================
-  private getSubject(type: AuthTokenType): string {
+  private getSubject(type: EmailOTPType): string {
     switch (type) {
       case 'EMAIL_VERIFY':
         return 'Verify your email';
@@ -59,7 +65,10 @@ export class AuthTokenService {
 
       case 'MAGIC_LOGIN':
         return 'Your magic login code';
-
+      case 'ENABLE_2FA':
+        return 'your OTP code ';
+      case 'DISABLE_2FA':
+        return 'your OTP code ';
       default:
         return 'Your verification code';
     }
@@ -71,7 +80,7 @@ export class AuthTokenService {
   private async checkVerifyRateLimit(
     userId: string,
     ip: string,
-    type: AuthTokenType,
+    type: EmailOTPType,
   ) {
     // per-user limit
     await this.redis.otpVerifyLimit.increment(
@@ -90,7 +99,7 @@ export class AuthTokenService {
   async sendOTP(
     userId: string,
     email: string,
-    type: AuthTokenType,
+    type: EmailOTPType,
   ): Promise<void> {
     const otp = generateOTP();
 
@@ -139,7 +148,7 @@ export class AuthTokenService {
   async verifyOTP(
     userId: string,
     otp: string,
-    type: AuthTokenType,
+    type: EmailOTPType,
   ): Promise<true> {
     const { ip, fingerprint } = this.ctx.get();
 

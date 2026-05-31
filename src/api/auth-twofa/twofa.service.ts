@@ -1,61 +1,241 @@
-//twofa.service
-
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
-import { encrypt, decrypt, generateTOTPSecret, bcryptCompare, bcryptHash } from 'src/common/crypto';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 
 import * as speakeasy from 'speakeasy';
+import * as crypto from 'crypto';
+
+import {
+  encrypt,
+  decrypt,
+  generateTOTPSecret,
+  bcryptCompare,
+  bcryptHash,
+} from 'src/common/crypto';
 
 import { RepositoryRegistry } from '../../repositories/prisma/repository.registry';
-import * as crypto from 'crypto';
+import { EmailOTPTokenService } from '../email-otp-token/email-otp-token.service';
+import { EmailOTPType } from '@prisma/client';
+import { PrismaService } from 'src/repositories/prisma/prisma.service';
+import { BackupTwoFACodeRepository } from '../../repositories/backup-code.repository';
+
 @Injectable()
 export class TwoFAService {
   constructor(
     private readonly repo: RepositoryRegistry,
+    private readonly prisma: PrismaService,
+    private readonly emailOTPTokenService: EmailOTPTokenService,
   ) {}
 
-  // --------------------------------------------------
-  // 🔑 STEP 1: GENERATE SECRET (SETUP)
-  // --------------------------------------------------
-  async generateSetup(userId: string, email: string) {
-    const { base32, otpauth_url } = generateTOTPSecret(email);
+  // ==================================================
+  // 📩 REQUEST ENABLE OTP
+  // ==================================================
 
-    // DO NOT STORE YET
-    return {
-      tempSecret: base32,
-      otpauthUrl: otpauth_url,
-    };
+  async requestEnableOTP(userId: string) {
+    const user = await this.getUserOrFail(userId);
+
+    if (user.totpEnabled) {
+      throw new ForbiddenException('2FA already enabled');
+    }
+
+    await this.emailOTPTokenService.sendOTP(
+      user.id,
+      user.email,
+      EmailOTPType.ENABLE_2FA,
+    );
+
+    return { success: true };
   }
 
-  // --------------------------------------------------
-  // ✅ STEP 2: ENABLE 2FA
-  // --------------------------------------------------
-  async enable(userId: string, token: string, tempSecret: string) {
+  // ==================================================
+  // 📩 REQUEST DISABLE OTP
+  // ==================================================
+
+  async requestDisableOTP(userId: string) {
+    const user = await this.getUserOrFail(userId);
+
+    if (!user.totpEnabled) {
+      throw new ForbiddenException('2FA already disabled');
+    }
+
+    await this.emailOTPTokenService.sendOTP(
+      user.id,
+      user.email,
+      EmailOTPType.DISABLE_2FA,
+    );
+
+    return { success: true };
+  }
+
+  // ==================================================
+  // 🔑 GENERATE SETUP
+  // ==================================================
+
+  async generateSetup(userId: string, emailOTP: string) {
+    this.validateOTP(emailOTP);
+
+    const user = await this.getUserOrFail(userId);
+
+    if (user.totpEnabled) {
+      throw new ForbiddenException('2FA already enabled');
+    }
+
+    await this.emailOTPTokenService.verifyOTP(
+      userId,
+      emailOTP,
+      EmailOTPType.ENABLE_2FA,
+    );
+
+    const { base32, otpauth_url } = generateTOTPSecret(user.email);
+
+    await this.repo.user.setTemp2FASecret(userId, encrypt(base32));
+
+    return { otpauthUrl: otpauth_url };
+  }
+
+  // ==================================================
+  // ✅ ENABLE 2FA
+  // ==================================================
+
+  async enable(userId: string, token: string) {
+    this.validateOTP(token);
+
+    const user = await this.getUserOrFail(userId);
+
+    if (user.totpEnabled) {
+      throw new ForbiddenException('2FA already enabled');
+    }
+
+    if (!user.tempTotpSecret) {
+      throw new BadRequestException('2FA setup not initialized');
+    }
+
+    const tempSecret = decrypt(user.tempTotpSecret);
     const isValid = this.verifyTOTP(token, tempSecret);
 
     if (!isValid) {
       throw new BadRequestException('Invalid TOTP code');
     }
 
-    const encrypted = encrypt(tempSecret);
+    const encryptedSecret = encrypt(tempSecret);
+    const backupCodes = await this.generateBackupCodes();
 
-    // enable 2FA
-    await this.repo.user.enable2FA(userId, encrypted);
+    const hashedBackupCodes = await Promise.all(
+      backupCodes.map((code) => bcryptHash(this.normalizeBackupCode(code))),
+    );
 
-    // invalidate sessions
-    await this.repo.user.bumpTokenVersion(userId);
+    await this.prisma.$transaction(async (tx) => {
 
-    // generate backup codes
-    const backupCodes = await this.generateBackupCodes(userId);
+      // UserRepository methods now accept tx as last argument
+      await this.repo.user.enable2FA(userId, encryptedSecret, tx);
+      await this.repo.backupTwoFACode.deleteAllByUser(userId,tx);
+      await this.repo.backupTwoFACode.createMany(userId, hashedBackupCodes,tx);
+      await this.repo.user.bumpTokenVersion(userId, tx);
+    });
 
     return {
       success: true,
-      backupCodes, // ⚠️ show once
+      backupCodes,
     };
   }
 
-  // --------------------------------------------------
+  // ==================================================
+  // 🔐 VERIFY 2FA
+  // ==================================================
+
+  async verify(userId: string, token: string): Promise<boolean> {
+    this.validate2FACode(token);
+
+    const user = await this.getUserOrFail(userId);
+
+    if (!user.totpEnabled || !user.totpSecret) {
+      throw new UnauthorizedException('Invalid authentication state');
+    }
+
+    const normalized = this.normalizeBackupCode(token);
+    const secret = decrypt(user.totpSecret);
+
+    // TOTP
+    const isValidTOTP = this.verifyTOTP(normalized, secret);
+    if (isValidTOTP) {
+      return true;
+    }
+
+    // Backup Code
+    const isBackupValid = await this.verifyBackupCode(userId, normalized);
+    if (isBackupValid) {
+      return true;
+    }
+
+    throw new UnauthorizedException('Invalid 2FA code');
+  }
+
+  // ==================================================
+  // ❌ DISABLE 2FA
+  // ==================================================
+
+  async disable(userId: string, totpToken: string, emailOTP: string) {
+    this.validateOTP(emailOTP);
+    this.validate2FACode(totpToken);
+
+    const user = await this.getUserOrFail(userId);
+
+    if (!user.totpEnabled) {
+      throw new ForbiddenException('2FA already disabled');
+    }
+
+    await this.emailOTPTokenService.verifyOTP(
+      userId,
+      emailOTP,
+      EmailOTPType.DISABLE_2FA,
+    );
+
+    // Verify the TOTP/backup code before proceeding
+    await this.verify(userId, totpToken);
+
+    await this.prisma.$transaction(async (tx) => {
+
+      await this.repo.user.disable2FA(userId, tx);
+      await  this.repo.backupTwoFACode.deleteAllByUser(userId,tx);
+      await this.repo.user.bumpTokenVersion(userId, tx);
+    });
+
+    return { success: true };
+  }
+
+  // ==================================================
+  // 🔄 REGENERATE BACKUP CODES
+  // ==================================================
+
+  async regenerateBackupCodes(userId: string, token: string) {
+    await this.verify(userId, token);
+
+    const backupCodes = await this.generateBackupCodes();
+
+    const hashedBackupCodes = await Promise.all(
+      backupCodes.map((code) => bcryptHash(this.normalizeBackupCode(code))),
+    );
+
+    await this.prisma.$transaction(async (tx) => {
+
+      await  this.repo.backupTwoFACode.deleteAllByUser(userId);
+      await  this.repo.backupTwoFACode.createMany(userId, hashedBackupCodes,tx);
+      await this.repo.user.bumpTokenVersion(userId, tx);
+    });
+
+    return {
+      success: true,
+      backupCodes,
+    };
+  }
+
+  // ==================================================
   // 🔍 VERIFY TOTP
-  // --------------------------------------------------
+  // ==================================================
+
   private verifyTOTP(token: string, secret: string): boolean {
     return speakeasy.totp.verify({
       secret,
@@ -65,96 +245,92 @@ export class TwoFAService {
     });
   }
 
-  // --------------------------------------------------
-  // 🔐 VERIFY 2FA (LOGIN STEP)
-  // --------------------------------------------------
-  async verify(userId: string, token: string): Promise<boolean> {
-    const user = await this.repo.user.findById(userId);
+  // ==================================================
+  // 🧾 VERIFY BACKUP CODE
+  // ==================================================
 
-    if (!user || !user.totpEnabled || !user.totpSecret) {
-      throw new UnauthorizedException('2FA not enabled');
-    }
-
-    const secret = decrypt(user.totpSecret);
-
-    // 1. Try TOTP
-    const isValidTOTP = this.verifyTOTP(token, secret);
-
-    if (isValidTOTP) return true;
-
-    // 2. Try backup codes
-    const isBackupValid = await this.verifyBackupCode(userId, token);
-
-    if (isBackupValid) return true;
-
-    throw new UnauthorizedException('Invalid 2FA code');
-  }
-
-  // --------------------------------------------------
-  // 🧾 BACKUP CODE VERIFY
-  // --------------------------------------------------
-  private async verifyBackupCode(
-    userId: string,
-    token: string,
-  ): Promise<boolean> {
+  private async verifyBackupCode(userId: string, token: string): Promise<boolean> {
     const codes = await this.repo.backupTwoFACode.findUnusedByUser(userId);
 
     for (const code of codes) {
       const match = await bcryptCompare(token, code.codeHash);
-      if (match) {
-        // 🔥 atomic consume
-        await this.repo.backupTwoFACode.consume(userId, code.codeHash);
-        return true;
-      }
+      if (!match) continue;
+
+      await this.repo.backupTwoFACode.consume(userId, code.codeHash);
+      return true;
     }
 
     return false;
   }
 
-  // --------------------------------------------------
+  // ==================================================
   // 🔁 GENERATE BACKUP CODES
-  // --------------------------------------------------
-  private async generateBackupCodes(userId: string): Promise<string[]> {
-    const rawCodes = Array.from({ length: 10 }).map(() =>
-      crypto.randomBytes(8).toString('hex'),
+  // ==================================================
+
+  private async generateBackupCodes(): Promise<string[]> {
+    return Array.from({ length: 10 }).map(() =>
+      this.formatBackupCode(crypto.randomBytes(8).toString('hex')),
     );
-
-    const hashed = await Promise.all(
-      rawCodes.map((code) => bcryptHash(code)),);
-
-    // delete old ones (important)
-    await this.repo.backupTwoFACode.deleteAllByUser(userId);
-
-    await this.repo.backupTwoFACode.createMany(userId, hashed);
-
-    return rawCodes;
   }
 
-  // --------------------------------------------------
-  // 🔄 REGENERATE BACKUP CODES
-  // --------------------------------------------------
-  async regenerateBackupCodes(userId: string): Promise<string[]> {
-    return this.generateBackupCodes(userId);
+  // ==================================================
+  // 🧩 FORMAT BACKUP CODE
+  // ==================================================
+
+  private formatBackupCode(code: string): string {
+    return code.match(/.{1,4}/g)?.join('-')!;
   }
 
-  // --------------------------------------------------
-  // ❌ DISABLE 2FA
-  // --------------------------------------------------
-  async disable(userId: string, token: string) {
-    const isValid = await this.verify(userId, token);
+  // ==================================================
+  // 🧹 NORMALIZE BACKUP CODE
+  // ==================================================
 
-    if (!isValid) {
-      throw new UnauthorizedException('Invalid 2FA');
+  private normalizeBackupCode(code: string): string {
+    return code.replace(/-/g, '').toLowerCase();
+  }
+
+  // ==================================================
+  // ✅ VALIDATE EMAIL OTP
+  // ==================================================
+
+  private validateOTP(token: string) {
+    if (!token) {
+      throw new BadRequestException('OTP token is required');
+    }
+    if (!/^\d{6}$/.test(token)) {
+      throw new BadRequestException('Invalid OTP format');
+    }
+  }
+
+  // ==================================================
+  // ✅ VALIDATE 2FA CODE
+  // ==================================================
+
+  private validate2FACode(token: string) {
+    if (!token) {
+      throw new BadRequestException('2FA token is required');
     }
 
-    await this.repo.user.disable2FA(userId);
+    const normalized = this.normalizeBackupCode(token);
+    const isTOTP = /^\d{6}$/.test(normalized);
+    const isBackup = /^[a-f0-9]{16}$/i.test(normalized);
 
-    // remove backup codes
-    await this.repo.backupTwoFACode.deleteAllByUser(userId);
+    if (!isTOTP && !isBackup) {
+      throw new BadRequestException('Invalid 2FA token format');
+    }
+  }
 
-    // invalidate sessions
-    await this.repo.user.bumpTokenVersion(userId);
+  // ==================================================
+  // 👤 GET USER
+  // ==================================================
 
-    return { success: true };
+  private async getUserOrFail(userId: string) {
+    const user = await this.repo.user.findById(userId);
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    return user;
   }
 }

@@ -1,28 +1,28 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from './prisma/prisma.service';
-import { Prisma, AuthToken, AuthTokenType } from '@prisma/client';
+import { Prisma, EmailOTPToken, EmailOTPType } from '@prisma/client';
 
 @Injectable()
 export class AuthTokenRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   // ---------- CREATE ----------
-  async create(data: Prisma.AuthTokenCreateInput,): Promise<AuthToken> {
-    return this.prisma.authToken.create({ data });
+  async create(data: Prisma.EmailOTPTokenCreateInput,): Promise<EmailOTPToken> {
+    return this.prisma.emailOTPToken.create({ data });
   }
 
   // ---------- FIND ----------
-  async findByHash(tokenHash: string): Promise<AuthToken | null> {
-    return this.prisma.authToken.findUnique({
+  async findByHash(tokenHash: string): Promise<EmailOTPToken | null> {
+    return this.prisma.emailOTPToken.findUnique({
       where: { tokenHash },
     });
   }
 
   async findValidToken(
     userId: string,
-    type: AuthTokenType,
-  ): Promise<AuthToken | null> {
-    return this.prisma.authToken.findFirst({
+    type: EmailOTPType,
+  ): Promise<EmailOTPToken | null> {
+    return this.prisma.emailOTPToken.findFirst({
       where: {
         userId,
         type,
@@ -39,7 +39,7 @@ export class AuthTokenRepository {
 
   // ---------- CONSUME (CRITICAL) ----------
   async consume(tokenHash: string): Promise<boolean> {
-    const result = await this.prisma.authToken.updateMany({
+    const result = await this.prisma.emailOTPToken.updateMany({
       where: {
         tokenHash,
         usedAt: null,
@@ -58,9 +58,9 @@ export class AuthTokenRepository {
   // ---------- DELETE ----------
   async deleteByUserAndType(
     userId: string,
-    type: AuthTokenType,
+    type: EmailOTPType,
   ): Promise<Prisma.BatchPayload> {
-    return this.prisma.authToken.deleteMany({
+    return this.prisma.emailOTPToken.deleteMany({
       where: {
         userId,
         type,
@@ -69,7 +69,7 @@ export class AuthTokenRepository {
   }
 
   async deleteExpired(): Promise<Prisma.BatchPayload> {
-    return this.prisma.authToken.deleteMany({
+    return this.prisma.emailOTPToken.deleteMany({
       where: {
         expiresAt: {
           lt: new Date(),

@@ -1,6 +1,6 @@
 import { Injectable, ForbiddenException } from '@nestjs/common';
 import { RedisService } from '../redis.service';
-import { AuthTokenType } from '@prisma/client';
+import { EmailOTPType } from '@prisma/client';
 
 @Injectable()
 export class EmailLimitStore {
@@ -12,7 +12,7 @@ export class EmailLimitStore {
     return this.redisService.getClient();
   }
 
-  private key(userId: string, type: AuthTokenType) {
+  private key(userId: string, type: EmailOTPType) {
     return `${this.prefix}${userId}:${type}`;
   }
 
@@ -21,7 +21,7 @@ export class EmailLimitStore {
    */
   async increment(
     userId: string,
-    type: AuthTokenType,
+    type: EmailOTPType,
     ttlMs: number,
     maxAttempts = 5,
   ): Promise<void> {
@@ -44,7 +44,7 @@ export class EmailLimitStore {
   /**
    * 🔍 Get current attempts
    */
-  async get(userId: string, type: AuthTokenType): Promise<number> {
+  async get(userId: string, type: EmailOTPType): Promise<number> {
     const key = this.key(userId, type);
     const val = await this.client.get(key);
     return val ? Number(val) : 0;
@@ -53,7 +53,7 @@ export class EmailLimitStore {
   /**
    * ♻️ Reset (optional after success)
    */
-  async reset(userId: string, type: AuthTokenType) {
+  async reset(userId: string, type: EmailOTPType) {
     const key = this.key(userId, type);
     await this.client.del(key);
   }
