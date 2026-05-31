@@ -3,7 +3,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { AuthTokenType, Device, LoginAttemptType } from '@prisma/client';
+import { EmailOTPType, Device, LoginAttemptType } from '@prisma/client';
 
 import { hashPassword, verifyPassword } from '../../common/crypto';
 import { RequestContextService } from '../../common/request-context/request-context.service';
@@ -13,11 +13,11 @@ import { RepositoryRegistry } from '../../repositories/prisma/repository.registr
 
 import { AuditService } from './audit.service';
 import { SecurityService } from './security.service';
-import { AuthTokenService } from './token-auth.service';
 import { TokenService } from './token.service';
 import { LoginOutput } from '../../common/interface/auth/registerService';
 import { TwoFAService } from '../auth-twofa/twofa.service';
 import { PrismaService } from '../../repositories/prisma/prisma.service';
+import { EmailOTPTokenService } from '../email-otp-token/email-otp-token.service';
 
 type VerifyType = 'OTP' | 'TOTP';
 
@@ -30,7 +30,7 @@ export class AuthService {
     private readonly audit: AuditService,
     private readonly redis: RedisStorageRegistry,
     private readonly ctx: RequestContextService,
-    private readonly authTokenService: AuthTokenService,
+    private readonly emailOTPTokenService: EmailOTPTokenService,
     private readonly twoFA: TwoFAService,
     private readonly prisma: PrismaService,
   ) {}
@@ -51,10 +51,10 @@ export class AuthService {
     const passwordHash = await hashPassword(password);
     const user = await this.repo.user.create({ email, passwordHash });
 
-    await this.authTokenService.sendOTP(
+    await this.emailOTPTokenService.sendOTP(
       user.id,
       user.email,
-      AuthTokenType.EMAIL_VERIFY,
+      EmailOTPType.EMAIL_VERIFY,
     );
 
     return { success: true };
@@ -72,7 +72,7 @@ export class AuthService {
       user.email,
       otp,
       LoginAttemptType.OTP,
-      AuthTokenType.EMAIL_VERIFY,
+      EmailOTPType.EMAIL_VERIFY,
     );
 
     await this.repo.user.markEmailVerified(userId);
@@ -129,10 +129,10 @@ export class AuthService {
     }
 
     // ✅ OTHERWISE SEND OTP
-    await this.authTokenService.sendOTP(
+    await this.emailOTPTokenService.sendOTP(
       user.id,
       user.email,
-      AuthTokenType.LOGIN_VERIFY,
+      EmailOTPType.LOGIN_VERIFY,
     );
 
     return {
@@ -172,7 +172,7 @@ export class AuthService {
           user.email,
           token,
           LoginAttemptType.OTP,
-          AuthTokenType.LOGIN_VERIFY,
+          EmailOTPType.LOGIN_VERIFY,
         );
       }
     } catch (err) {
@@ -262,10 +262,10 @@ export class AuthService {
     const user = await this.repo.user.findByEmail(email);
     if (!user) return { success: true };
 
-    await this.authTokenService.sendOTP(
+    await this.emailOTPTokenService.sendOTP(
       user.id,
       user.email,
-      AuthTokenType.PASSWORD_RESET,
+      EmailOTPType.PASSWORD_RESET,
     );
 
     return { success: true };
@@ -288,7 +288,7 @@ export class AuthService {
       user.email,
       otp,
       LoginAttemptType.OTP,
-      AuthTokenType.PASSWORD_RESET,
+      EmailOTPType.PASSWORD_RESET,
     );
 
     if (!validatePassword(newPassword)) {
@@ -345,10 +345,10 @@ export class AuthService {
     email: string,
     token: string,
     attemptType: LoginAttemptType,
-    tokenType: AuthTokenType,
+    tokenType: EmailOTPType,
   ) {
     try {
-      await this.authTokenService.verifyOTP(userId, token, tokenType);
+      await this.emailOTPTokenService.verifyOTP(userId, token, tokenType);
     } catch (err) {
       await this.handleFailedAttempt(userId, { email, type: attemptType });
       throw err;

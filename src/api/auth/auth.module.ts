@@ -5,15 +5,14 @@ import { TokenService } from './token.service';
 import { AuditService } from './audit.service';
 import { SecurityService } from './security.service';
 import { AppJwtModule } from '../../common/jwt/jwt.module';
-import { AuthTokenService } from './token-auth.service';
-import { MailModule } from '../../common/mail/mail.module';
 import { TwoFAModule } from '../auth-twofa/twofa.module';
+import { EmailOtpTokenModule } from '../email-otp-token/email-otp-token.module';
 
 
 @Module({
-  imports: [AppJwtModule,MailModule,TwoFAModule],
+  imports: [AppJwtModule,TwoFAModule,EmailOtpTokenModule],
   controllers: [AuthController],
-  providers: [ AuthService,TokenService,AuditService,SecurityService,AuthTokenService ],
-  exports: [AuthService,TokenService,AuditService,SecurityService,AuthTokenService ],
+  providers: [ AuthService,TokenService,AuditService,SecurityService],
+  exports: [AuthService,TokenService,AuditService,SecurityService ],
 })
 export class AuthModule {}

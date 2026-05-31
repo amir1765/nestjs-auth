@@ -16,6 +16,8 @@ import { AuthModule } from './api/auth/auth.module';
 import { RequestContextModule } from './common/request-context/request-context.module';
 import { MailModule } from './common/mail/mail.module';
 import { TwoFAModule } from './api/auth-twofa/twofa.module';
+import { EmailOTPTokenService } from './api/email-otp-token/email-otp-token.service';
+import { EmailOtpTokenModule } from './api/email-otp-token/email-otp-token.module';
 
 @Module({
   imports: [
@@ -41,6 +43,7 @@ import { TwoFAModule } from './api/auth-twofa/twofa.module';
     //core
     AuthModule,
     TwoFAModule,
+    EmailOtpTokenModule,
     //common folder for isolated sys which is independent to actual logic but can help the core
     IdempotencyModule,
     RequestContextModule,

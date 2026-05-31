@@ -4,19 +4,36 @@ import { Prisma, User } from '@prisma/client';
 
 @Injectable()
 export class UserRepository {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+  ) {}
 
-  // ---------- CREATE ----------
-  async create(data: Prisma.UserCreateInput): Promise<User> {
-    return this.prisma.user.create({ data });
+  // ==================================================
+  // CREATE
+  // ==================================================
+
+  async create(
+    data: Prisma.UserCreateInput,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const db = tx ?? this.prisma;
+
+    return db.user.create({
+      data,
+    });
   }
 
-  // ---------- FIND UNIQUE ----------
+  // ==================================================
+  // FIND UNIQUE
+  // ==================================================
+
   async findById(
     id: string,
     args?: Prisma.UserFindUniqueArgs,
+    tx?: Prisma.TransactionClient,
   ): Promise<User | null> {
-    return this.prisma.user.findUnique({
+    const db = tx ?? this.prisma;
+    return db.user.findUnique({
       where: { id },
       ...args,
     });
@@ -25,40 +42,75 @@ export class UserRepository {
   async findByEmail(
     email: string,
     args?: Prisma.UserFindUniqueArgs,
+    tx?: Prisma.TransactionClient,
   ): Promise<User | null> {
-    return this.prisma.user.findUnique({
+    const db = tx ?? this.prisma;
+    return db.user.findUnique({
       where: { email },
       ...args,
     });
   }
 
-  async findVerifiedByEmail(email: string): Promise<User | null> {
-    return this.prisma.user.findFirst({
+  async findVerifiedByEmail(
+    email: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<User | null> {
+    const db = tx ?? this.prisma;
+    return db.user.findFirst({
       where: {
         email,
         emailVerified: true,
       },
     });
   }
-  // ---------- FIND MANY ----------
-  async findMany(args: Prisma.UserFindManyArgs = {}): Promise<User[]> {
-    return this.prisma.user.findMany(args);
+
+  // ==================================================
+  // FIND MANY
+  // ==================================================
+
+  async findMany(
+    args: Prisma.UserFindManyArgs = {},
+    tx?: Prisma.TransactionClient,
+  ): Promise<User[]> {
+    const db = tx ?? this.prisma;
+    return db.user.findMany(args);
   }
 
   async findPaginated(
     args: Prisma.UserFindManyArgs,
-  ): Promise<{ data: User[]; total: number }> {
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.user.findMany(args),
-      this.prisma.user.count({ where: args.where }),
+    tx?: Prisma.TransactionClient,
+  ): Promise<{
+    data: User[];
+    total: number;
+  }> {
+    const db = tx ?? this.prisma;
+    // transaction client does not support nested transaction safely
+    // so avoid using $transaction here – plain queries inside a passed tx are fine
+
+    const [data, total] = await Promise.all([
+      db.user.findMany(args),
+      db.user.count({
+        where: args.where,
+      }),
     ]);
 
-    return { data, total };
+    return {
+      data,
+      total,
+    };
   }
 
-  // ---------- UPDATE ----------
-  async update(id: string, data: Prisma.UserUpdateInput): Promise<User> {
-    return this.prisma.user.update({
+  // ==================================================
+  // UPDATE
+  // ==================================================
+
+  async update(
+    id: string,
+    data: Prisma.UserUpdateInput,
+    tx?: Prisma.TransactionClient,
+  ): Promise<User> {
+    const db = tx ?? this.prisma;
+    return db.user.update({
       where: { id },
       data,
     });
@@ -67,25 +119,40 @@ export class UserRepository {
   async updateByEmail(
     email: string,
     data: Prisma.UserUpdateInput,
+    tx?: Prisma.TransactionClient,
   ): Promise<User> {
-    return this.prisma.user.update({
+    const db = tx ?? this.prisma;
+    return db.user.update({
       where: { email },
       data,
     });
   }
 
-  // Atomic increment (safe for counters)
-  async incrementFailedAttempts(id: string): Promise<User> {
-    return this.prisma.user.update({
+  // ==================================================
+  // LOGIN SECURITY
+  // ==================================================
+
+  async incrementFailedAttempts(
+    id: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<User> {
+    const db = tx ?? this.prisma;
+    return db.user.update({
       where: { id },
       data: {
-        failedLoginAttempts: { increment: 1 },
+        failedLoginAttempts: {
+          increment: 1,
+        },
       },
     });
   }
 
-  async resetFailedAttempts(id: string): Promise<User> {
-    return this.prisma.user.update({
+  async resetFailedAttempts(
+    id: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<User> {
+    const db = tx ?? this.prisma;
+    return db.user.update({
       where: { id },
       data: {
         failedLoginAttempts: 0,
@@ -94,15 +161,27 @@ export class UserRepository {
     });
   }
 
-  async lockAccount(id: string, lockUntil: Date): Promise<User> {
-    return this.prisma.user.update({
+  async lockAccount(
+    id: string,
+    lockUntil: Date,
+    tx?: Prisma.TransactionClient,
+  ): Promise<User> {
+    const db = tx ?? this.prisma;
+    return db.user.update({
       where: { id },
-      data: { lockUntil },
+      data: {
+        lockUntil,
+      },
     });
   }
 
-  async updateLastLogin(id: string, ip: string): Promise<User> {
-    return this.prisma.user.update({
+  async updateLastLogin(
+    id: string,
+    ip: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<User> {
+    const db = tx ?? this.prisma;
+    return db.user.update({
       where: { id },
       data: {
         lastLoginAt: new Date(),
@@ -111,45 +190,109 @@ export class UserRepository {
     });
   }
 
-  async enable2FA(id: string, encryptedSecret: string): Promise<User> {
-    return this.prisma.user.update({
+  // ==================================================
+  // 2FA
+  // ==================================================
+
+  async enable2FA(
+    id: string,
+    encryptedSecret: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<User> {
+    const db = tx ?? this.prisma;
+    return db.user.update({
       where: { id },
       data: {
         totpSecret: encryptedSecret,
+        tempTotpSecret: null,
         totpEnabled: true,
+        totpEnabledAt: new Date(),
       },
     });
   }
 
-  async disable2FA(id: string): Promise<User> {
-    return this.prisma.user.update({
+  async disable2FA(
+    id: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<User> {
+    const db = tx ?? this.prisma;
+    return db.user.update({
       where: { id },
       data: {
         totpSecret: null,
+        tempTotpSecret: null,
         totpEnabled: false,
+        totpEnabledAt: null,
       },
     });
   }
 
-  async bumpTokenVersion(id: string): Promise<User> {
-    return this.prisma.user.update({
+  async setTemp2FASecret(
+    id: string,
+    encryptedSecret: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<User> {
+    const db = tx ?? this.prisma;
+    return db.user.update({
       where: { id },
       data: {
-        tokenVersion: { increment: 1 },
+        tempTotpSecret: encryptedSecret,
       },
     });
   }
 
-  // ---------- DELETE ----------
-  async delete(id: string): Promise<User> {
-    return this.prisma.user.delete({
+  async clearTemp2FASecret(
+    id: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<User> {
+    const db = tx ?? this.prisma;
+    return db.user.update({
+      where: { id },
+      data: {
+        tempTotpSecret: null,
+      },
+    });
+  }
+
+  async bumpTokenVersion(
+    id: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<User> {
+    const db = tx ?? this.prisma;
+    return db.user.update({
+      where: { id },
+      data: {
+        tokenVersion: {
+          increment: 1,
+        },
+      },
+    });
+  }
+
+  // ==================================================
+  // DELETE
+  // ==================================================
+
+  async delete(
+    id: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<User> {
+    const db = tx ?? this.prisma;
+    return db.user.delete({
       where: { id },
     });
   }
 
-  // ---------- EXISTS ----------
-  async existsByEmail(email: string): Promise<boolean> {
-    const user = await this.prisma.user.findUnique({
+  // ==================================================
+  // EXISTS
+  // ==================================================
+
+  async existsByEmail(
+    email: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<boolean> {
+    const db = tx ?? this.prisma;
+    const user = await db.user.findUnique({
       where: { email },
       select: { id: true },
     });
@@ -157,9 +300,16 @@ export class UserRepository {
     return !!user;
   }
 
-  // ---------- EMAIL VERIFICATION ----------
-  async markEmailVerified(id: string): Promise<User> {
-    return this.prisma.user.update({
+  // ==================================================
+  // EMAIL VERIFICATION
+  // ==================================================
+
+  async markEmailVerified(
+    id: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<User> {
+    const db = tx ?? this.prisma;
+    return db.user.update({
       where: { id },
       data: {
         emailVerified: true,
@@ -167,25 +317,45 @@ export class UserRepository {
     });
   }
 
-// ---------- PASSWORD UPDATE ----------
-  async updatePassword(id: string, passwordHash: string): Promise<User> {
-    return this.prisma.user.update({
+  // ==================================================
+  // PASSWORD
+  // ==================================================
+
+  async updatePassword(
+    id: string,
+    passwordHash: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<User> {
+    const db = tx ?? this.prisma;
+    return db.user.update({
       where: { id },
       data: {
         passwordHash,
-        tokenVersion: { increment: 1 }, // 🔥 VERY IMPORTANT
+        tokenVersion: {
+          increment: 1,
+        },
       },
     });
   }
-  // ---------- ADVANCED ----------
-  async withRelations(id: string): Promise<Prisma.UserGetPayload<{
-    include: {
-      roles: true;
-      sessions: true;
-      devices: true;
-    };
-  }> | null> {
-    return this.prisma.user.findUnique({
+
+  // ==================================================
+  // ADVANCED
+  // ==================================================
+
+  async withRelations(
+    id: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<
+    Prisma.UserGetPayload<{
+      include: {
+        roles: true;
+        sessions: true;
+        devices: true;
+      };
+    }> | null
+  > {
+    const db = tx ?? this.prisma;
+    return db.user.findUnique({
       where: { id },
       include: {
         roles: true,

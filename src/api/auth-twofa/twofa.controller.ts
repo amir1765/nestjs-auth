@@ -21,56 +21,178 @@ import { JwtAuthGuard } from 'src/guards/jwt-auth.guard';
 @Controller('2fa')
 export class TwoFAController {
   constructor(private readonly twoFAService: TwoFAService) {}
+  // ==================================================
+  // 📩 REQUEST ENABLE OTP
+  // ==================================================
 
-  // --------------------------------------------------
-  // 🔐 GENERATE SETUP QR
-  // --------------------------------------------------
-  @Post('generate')
-  @ApiOperation({ summary: 'Generate 2FA secret + QR code' })
+  @Post('request-enable')
+  @ApiOperation({
+    summary:
+      'Send email OTP for enabling 2FA',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Returns QR + temp secret',
+    description:
+      'Enable 2FA OTP sent successfully',
   })
-  async generate(@Req() req: Request,@Body() dto: Generate2FADto) {
+  async requestEnable(
+    @Req() req: Request,
+  ) {
     const userId = req['user'].sub;
 
-    return this.twoFAService.generateSetup(userId, dto.email);
-  }
-
-  // --------------------------------------------------
-  // ✅ ENABLE 2FA
-  // --------------------------------------------------
-  @Post('enable')
-  @ApiOperation({ summary: 'Enable 2FA after verifying OTP' })
-  async enable(@Req() req: Request,@Body() dto: Enable2FADto) {
-    const userId = req['user'].sub;
-    return this.twoFAService.enable(
+    return this.twoFAService.requestEnableOTP(
       userId,
-      dto.token,
-      dto.tempSecret,
     );
   }
 
-  // --------------------------------------------------
-  // 🔍 VERIFY 2FA (LOGIN STEP)
-  // --------------------------------------------------
-  @Post('verify')
-  @ApiOperation({ summary: 'Verify TOTP or backup code' })
-  async verify(@Req() req: Request,@Body() dto: Verify2FADto) {
+  // ==================================================
+  // 📩 REQUEST DISABLE OTP
+  // ==================================================
+
+  @Post('request-disable')
+  @ApiOperation({
+    summary:
+      'Send email OTP for disabling 2FA',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Disable 2FA OTP sent successfully',
+  })
+  async requestDisable(
+    @Req() req: Request,
+  ) {
     const userId = req['user'].sub;
 
-    return this.twoFAService.verify(userId, dto.token);
+    return this.twoFAService.requestDisableOTP(
+      userId,
+    );
   }
 
-  // --------------------------------------------------
+  // ==================================================
+  // 🔑 GENERATE SETUP
+  // ==================================================
+
+  @Post('generate')
+  @ApiOperation({
+    summary:
+      'Generate 2FA setup secret and QR',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Returns otpauth URL',
+  })
+  async generate(
+    @Req() req: Request,
+    @Body() dto: Generate2FADto,
+  ) {
+    const userId = req['user'].sub;
+
+    return this.twoFAService.generateSetup(
+      userId,
+      dto.otp,
+    );
+  }
+
+  // ==================================================
+  // ✅ ENABLE 2FA
+  // ==================================================
+
+  @Post('enable')
+  @ApiOperation({
+    summary: 'Enable 2FA',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      '2FA enabled successfully',
+  })
+  async enable(
+    @Req() req: Request,
+    @Body() dto: Enable2FADto,
+  ) {
+    const userId = req['user'].sub;
+
+    return this.twoFAService.enable(
+      userId,
+      dto.token,
+    );
+  }
+
+  // ==================================================
+  // 🔍 VERIFY 2FA
+  // ==================================================
+
+  @Post('verify')
+  @ApiOperation({
+    summary:
+      'Verify TOTP or backup code',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      '2FA verified successfully',
+  })
+  async verify(
+    @Req() req: Request,
+    @Body() dto: Verify2FADto,
+  ) {
+    const userId = req['user'].sub;
+
+    return this.twoFAService.verify(
+      userId,
+      dto.token,
+    );
+  }
+
+  // ==================================================
   // ❌ DISABLE 2FA
-  // --------------------------------------------------
+  // ==================================================
+
   @Post('disable')
-  @ApiOperation({ summary: 'Disable 2FA' })
-  async disable(@Req() req: Request,@Body() dto: Disable2FADto) {
+  @ApiOperation({
+    summary: 'Disable 2FA',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      '2FA disabled successfully',
+  })
+  async disable(
+    @Req() req: Request,
+    @Body() dto: Disable2FADto,
+  ) {
     const userId = req['user'].sub;
 
     return this.twoFAService.disable(
+      userId,
+      dto.token,
+      dto.otp,
+    );
+  }
+
+  // ==================================================
+  // 🔄 REGENERATE BACKUP CODES
+  // ==================================================
+
+  @Post('regenerate-backup-codes')
+  @ApiOperation({
+    summary:
+      'Regenerate backup recovery codes',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Backup codes regenerated successfully',
+  })
+  async regenerateBackupCodes(
+    @Req() req: Request,
+    @Body() dto: Verify2FADto,
+  ) {
+    const userId = req['user'].sub;
+
+    return this.twoFAService.regenerateBackupCodes(
       userId,
       dto.token,
     );

@@ -60,11 +60,13 @@ enum DeviceRiskLevel {
   BLOCKED
 }
 
-enum AuthTokenType {
+enum EmailOTPType {
   EMAIL_VERIFY
   PASSWORD_RESET
   MAGIC_LOGIN
   LOGIN_VERIFY
+  ENABLE_2FA
+  DISABLE_2FA
 }
 
 enum LoginAttemptType {
@@ -137,6 +139,8 @@ model User {
   // 2FA
   totpSecret           String? // encrypted TOTP secret
   totpEnabled          Boolean               @default(false)
+  tempTotpSecret       String?
+  totpEnabledAt        DateTime?
   // Security & Lockout
   failedLoginAttempts  Int                   @default(0)
   lockUntil            DateTime? // account locked until this time
@@ -156,7 +160,7 @@ model User {
   backupCodes          BackupCode[]
   // idempotencyKeys      IdempotencyKey[]
   webhookSubscriptions WebhookSubscription[]
-  AuthToken            AuthToken[]
+  emailToken           EmailOTPToken[]
 
   @@index([email])
   @@index([lockUntil])
@@ -423,13 +427,13 @@ model RequestNonce {
 //   @@index([key])
 //   @@map("rate_limit_buckets")
 // }
-model AuthToken {
+model EmailOTPToken {
   id     String @id @default(cuid())
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  type      AuthTokenType
-  tokenHash String        @unique
+  type      EmailOTPType
+  tokenHash String       @unique
 
   ip          String
   userAgent   String?
