@@ -16,12 +16,18 @@ import { AuthModule } from './api/auth/auth.module';
 import { RequestContextModule } from './common/request-context/request-context.module';
 import { MailModule } from './common/mail/mail.module';
 import { TwoFAModule } from './api/auth-twofa/twofa.module';
-import { EmailOTPTokenService } from './api/email-otp-token/email-otp-token.service';
 import { EmailOtpTokenModule } from './api/email-otp-token/email-otp-token.module';
 import { RbacModule } from './api/auth-rbac/rbac.module';
+import { BullModule } from '@nestjs/bullmq';
 
 @Module({
   imports: [
+    BullModule.forRoot({
+      connection: {
+        host: 'localhost',
+        port: 6379,
+      },
+    }),
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
