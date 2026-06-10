@@ -38,7 +38,7 @@ export class MailProcessor extends WorkerHost {
     }
   }
   @OnWorkerEvent('failed')
-  onFailed(job: Job | undefined, error: Error) {
+  async onFailed(job: Job | undefined, error: Error) {
     await this.repo.auditLog.create({
       action: AuditAction.WEBHOOK_SENT,
       metadata: {
