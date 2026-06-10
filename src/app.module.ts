@@ -18,6 +18,7 @@ import { MailModule } from './common/mail/mail.module';
 import { TwoFAModule } from './api/auth-twofa/twofa.module';
 import { EmailOTPTokenService } from './api/email-otp-token/email-otp-token.service';
 import { EmailOtpTokenModule } from './api/email-otp-token/email-otp-token.module';
+import { RbacModule } from './api/auth-rbac/rbac.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { EmailOtpTokenModule } from './api/email-otp-token/email-otp-token.modul
     RedisStorageModule,
     //core
     AuthModule,
+    RbacModule,
     TwoFAModule,
     EmailOtpTokenModule,
     //common folder for isolated sys which is independent to actual logic but can help the core
