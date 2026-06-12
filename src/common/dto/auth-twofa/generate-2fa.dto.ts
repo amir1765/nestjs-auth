@@ -10,9 +10,4 @@ export class Generate2FADto {
   @IsNotEmpty()
   @Length(6, 6, { message: 'Code must be exactly 6 characters' })
   otp!: string;
-  @ApiProperty({
-    example: 'user@email.com',
-    description: 'User email for QR label',
-  })
-  email!: string;
 }

@@ -6,9 +6,6 @@ import { AppJwtModule } from '../../common/jwt/jwt.module';
 import { AuditService } from '../auth/audit.service';
 import { EmailOtpTokenModule } from '../email-otp-token/email-otp-token.module';
 
-
-
-
 @Module({
   imports: [AppJwtModule,EmailOtpTokenModule],
   controllers: [TwoFAController],

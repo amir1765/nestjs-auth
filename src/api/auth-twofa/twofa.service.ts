@@ -13,14 +13,13 @@ import {
   decrypt,
   generateTOTPSecret,
   bcryptCompare,
-  bcryptHash,
+  bcryptHash, verifyPassword,
 } from 'src/common/crypto';
 
 import { RepositoryRegistry } from '../../repositories/prisma/repository.registry';
 import { EmailOTPTokenService } from '../email-otp-token/email-otp-token.service';
 import { EmailOTPType } from '@prisma/client';
 import { PrismaService } from 'src/repositories/prisma/prisma.service';
-import { BackupTwoFACodeRepository } from '../../repositories/backup-code.repository';
 
 @Injectable()
 export class TwoFAService {
@@ -88,7 +87,10 @@ export class TwoFAService {
       emailOTP,
       EmailOTPType.ENABLE_2FA,
     );
-
+    //if in any reson the temp 2fa secret was not empty
+    if (user.tempTotpSecret) {
+      await this.repo.user.clearTemp2FASecret(userId);
+    }
     const { base32, otpauth_url } = generateTOTPSecret(user.email);
 
     await this.repo.user.setTemp2FASecret(userId, encrypt(base32));
@@ -128,12 +130,12 @@ export class TwoFAService {
     );
 
     await this.prisma.$transaction(async (tx) => {
-
       // UserRepository methods now accept tx as last argument
       await this.repo.user.enable2FA(userId, encryptedSecret, tx);
-      await this.repo.backupTwoFACode.deleteAllByUser(userId,tx);
-      await this.repo.backupTwoFACode.createMany(userId, hashedBackupCodes,tx);
+      await this.repo.backupTwoFACode.deleteAllByUser(userId, tx);
+      await this.repo.backupTwoFACode.createMany(userId, hashedBackupCodes, tx);
       await this.repo.user.bumpTokenVersion(userId, tx);
+      await this.repo.user.clearTemp2FASecret(userId, tx);
     });
 
     return {
@@ -146,7 +148,7 @@ export class TwoFAService {
   // 🔐 VERIFY 2FA
   // ==================================================
 
-  async verify(userId: string, token: string): Promise<boolean> {
+  async verify(userId: string, token: string): Promise<{ success: boolean }> {
     this.validate2FACode(token);
 
     const user = await this.getUserOrFail(userId);
@@ -161,13 +163,17 @@ export class TwoFAService {
     // TOTP
     const isValidTOTP = this.verifyTOTP(normalized, secret);
     if (isValidTOTP) {
-      return true;
+      return {
+        success: true,
+      };
     }
 
     // Backup Code
     const isBackupValid = await this.verifyBackupCode(userId, normalized);
     if (isBackupValid) {
-      return true;
+      return {
+        success: true,
+      };
     }
 
     throw new UnauthorizedException('Invalid 2FA code');
@@ -177,7 +183,7 @@ export class TwoFAService {
   // ❌ DISABLE 2FA
   // ==================================================
 
-  async disable(userId: string, totpToken: string, emailOTP: string) {
+  async disable(userId: string,password:string, totpToken: string, emailOTP: string) {
     this.validateOTP(emailOTP);
     this.validate2FACode(totpToken);
 
@@ -186,6 +192,9 @@ export class TwoFAService {
     if (!user.totpEnabled) {
       throw new ForbiddenException('2FA already disabled');
     }
+    const isValid = await verifyPassword(user.passwordHash, password);
+
+    if (!isValid){throw new UnauthorizedException('Invalid credentials');}
 
     await this.emailOTPTokenService.verifyOTP(
       userId,
@@ -197,9 +206,8 @@ export class TwoFAService {
     await this.verify(userId, totpToken);
 
     await this.prisma.$transaction(async (tx) => {
-
       await this.repo.user.disable2FA(userId, tx);
-      await  this.repo.backupTwoFACode.deleteAllByUser(userId,tx);
+      await this.repo.backupTwoFACode.deleteAllByUser(userId, tx);
       await this.repo.user.bumpTokenVersion(userId, tx);
     });
 
@@ -220,9 +228,8 @@ export class TwoFAService {
     );
 
     await this.prisma.$transaction(async (tx) => {
-
-      await  this.repo.backupTwoFACode.deleteAllByUser(userId);
-      await  this.repo.backupTwoFACode.createMany(userId, hashedBackupCodes,tx);
+      await this.repo.backupTwoFACode.deleteAllByUser(userId, tx);
+      await this.repo.backupTwoFACode.createMany(userId, hashedBackupCodes, tx);
       await this.repo.user.bumpTokenVersion(userId, tx);
     });
 
@@ -249,18 +256,31 @@ export class TwoFAService {
   // 🧾 VERIFY BACKUP CODE
   // ==================================================
 
-  private async verifyBackupCode(userId: string, token: string): Promise<boolean> {
+  private async verifyBackupCode(
+    userId: string,
+    token: string,
+  ): Promise<boolean> {
     const codes = await this.repo.backupTwoFACode.findUnusedByUser(userId);
 
-    for (const code of codes) {
-      const match = await bcryptCompare(token, code.codeHash);
-      if (!match) continue;
+    const consumed = await this.prisma.$transaction(async (tx) => {
+      for (const code of codes) {
+        const match = await bcryptCompare(token, code.codeHash);
 
-      await this.repo.backupTwoFACode.consume(userId, code.codeHash);
-      return true;
-    }
+        if (!match) continue;
 
-    return false;
+        await this.repo.backupTwoFACode.consume(
+          userId,
+          code.codeHash,
+          tx,
+        );
+
+        return true;
+      }
+
+      return false;
+    });
+
+    return consumed;
   }
 
   // ==================================================
