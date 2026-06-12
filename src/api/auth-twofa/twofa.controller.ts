@@ -14,7 +14,7 @@ import { TwoFAService } from './twofa.service';
 
 import { Generate2FADto,Enable2FADto, Verify2FADto, Disable2FADto } from 'src/common/dto';
 import { JwtAuthGuard } from 'src/guards/jwt-auth.guard';
-
+import { Throttle } from '../../decorators/throttle.decorator';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 @ApiTags('2FA')
@@ -24,6 +24,7 @@ export class TwoFAController {
   // ==================================================
   // 📩 REQUEST ENABLE OTP
   // ==================================================
+  @Throttle(2,120000)
 
   @Post('request-enable')
   @ApiOperation({
@@ -48,7 +49,7 @@ export class TwoFAController {
   // ==================================================
   // 📩 REQUEST DISABLE OTP
   // ==================================================
-
+  @Throttle(5,1440*60000)
   @Post('request-disable')
   @ApiOperation({
     summary:
@@ -72,7 +73,7 @@ export class TwoFAController {
   // ==================================================
   // 🔑 GENERATE SETUP
   // ==================================================
-
+  @Throttle(5,1440*60000)
   @Post('generate')
   @ApiOperation({
     summary:
@@ -98,7 +99,7 @@ export class TwoFAController {
   // ==================================================
   // ✅ ENABLE 2FA
   // ==================================================
-
+  @Throttle(5,1440*60000)
   @Post('enable')
   @ApiOperation({
     summary: 'Enable 2FA',
@@ -123,7 +124,7 @@ export class TwoFAController {
   // ==================================================
   // 🔍 VERIFY 2FA
   // ==================================================
-
+  @Throttle(30,60000)
   @Post('verify')
   @ApiOperation({
     summary:
@@ -149,7 +150,7 @@ export class TwoFAController {
   // ==================================================
   // ❌ DISABLE 2FA
   // ==================================================
-
+  @Throttle(5,1440*60000)
   @Post('disable')
   @ApiOperation({
     summary: 'Disable 2FA',
@@ -167,6 +168,7 @@ export class TwoFAController {
 
     return this.twoFAService.disable(
       userId,
+      dto.password,
       dto.token,
       dto.otp,
     );
@@ -175,7 +177,7 @@ export class TwoFAController {
   // ==================================================
   // 🔄 REGENERATE BACKUP CODES
   // ==================================================
-
+  @Throttle(5,1440*60000)
   @Post('regenerate-backup-codes')
   @ApiOperation({
     summary:

@@ -5,9 +5,10 @@ import { ConfigService } from '@nestjs/config';
 import { setCryptoKey } from './common/crypto';
 import helmet from 'helmet';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { ValidationPipe } from '@nestjs/common';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
   app.use(helmet());
   // app.enableCors({
   //   origin: ['https://yourdomain.com'],

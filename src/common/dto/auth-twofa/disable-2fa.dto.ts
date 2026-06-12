@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, Length } from 'class-validator';
+import { IsNotEmpty, IsString, Length, MinLength } from 'class-validator';
 
 export class Disable2FADto {
   @ApiProperty({
@@ -10,10 +10,16 @@ export class Disable2FADto {
   @IsNotEmpty()
   @Length(6, 6, { message: 'Code must be exactly 6 characters' })
   otp!: string;
+
   @ApiProperty({
     example: '123456',
     description: 'Current valid TOTP code',
   })
   token!: string;
+
+  @ApiProperty({ example: 'Str0ngP@ss' })
+  @IsString()
+  @MinLength(8)
+  password!: string;
 
 }

@@ -2,7 +2,8 @@ import * as speakeasy from 'speakeasy';
 
 export  function generateTOTPSecret(userEmail: string) {
   const secret = speakeasy.generateSecret({
-    name: `YourApp (${userEmail})`,
+    //todo: name shit
+    name: `shit name (${userEmail})`,
   });
 
   return {
