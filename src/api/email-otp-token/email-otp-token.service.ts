@@ -6,19 +6,23 @@ import {
 
 import { EmailOTPType } from '@prisma/client';
 
-import { MailService } from 'src/common/mail/mail.service';
 import { RepositoryRegistry } from '../../repositories/prisma/repository.registry';
 import { generateOTP, hashToken } from '../../common/crypto';
 import { RequestContextService } from '../../common/request-context/request-context.service';
 import { RedisStorageRegistry } from '../../redis/redis-storage.registry';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 
 @Injectable()
 export class EmailOTPTokenService {
   constructor(
     private readonly repo: RepositoryRegistry,
-    private readonly mailService: MailService,
     private readonly redis: RedisStorageRegistry,
     private readonly ctx: RequestContextService,
+
+    @InjectQueue('email')
+    private readonly emailQueue: Queue,
+
   ) {}
 
   // ===============================
@@ -130,16 +134,26 @@ export class EmailOTPTokenService {
       expiresAt: expiryDate,
     });
 
-    await this.mailService.sendMail({
-      to: email,
-      subject: this.getSubject(type),
-      html: `
-        <div>
-          <h2>Your verification code</h2>
-          <p>${otp}</p>
-        </div>
-      `,
-    });
+    await this.emailQueue.add(
+      'send-otp-email',
+      {
+        to: email,
+        otp,
+        type,
+        subject: this.getSubject(type),
+      },
+      {
+        attempts: 5,
+
+        backoff: {
+          type: 'exponential',
+          delay: 5000,
+        },
+
+        removeOnComplete: 1000,
+        removeOnFail: 1000,
+      },
+    );
   }
 
   // ===============================

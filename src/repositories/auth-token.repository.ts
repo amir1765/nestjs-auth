@@ -68,12 +68,26 @@ export class AuthTokenRepository {
     });
   }
 
-  async deleteExpired(): Promise<Prisma.BatchPayload> {
+  async deleteExpiredAndUsed(): Promise<Prisma.BatchPayload> {
+    const retention = new Date(
+      Date.now() - 24 * 60 * 60 * 1000, // 24h
+    );
+
     return this.prisma.emailOTPToken.deleteMany({
       where: {
-        expiresAt: {
-          lt: new Date(),
-        },
+        OR: [
+          {
+            expiresAt: {
+              lt: new Date(),
+            },
+          },
+          {
+            usedAt: {
+              not: null,
+              lt: retention,
+            },
+          },
+        ],
       },
     });
   }

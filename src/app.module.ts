@@ -8,20 +8,31 @@ import configuration from './common/config/configuration';
 import { envSchema } from './common/config/env.schema';
 import { RepositoriesModule } from './repositories/repositories.module';
 import { ThrottlerModule } from '@nestjs/throttler';
-import {AdvancedRateLimitGuard } from './guards/throttler.guard';
+import { AdvancedRateLimitGuard } from './guards/throttler.guard';
 import { APP_GUARD } from '@nestjs/core';
-import { RedisStorageModule,  } from './redis/redis-storage.module';
+import { RedisStorageModule } from './redis/redis-storage.module';
 import { IdempotencyModule } from './common/idempotency/idempotency.module';
 import { AuthModule } from './api/auth/auth.module';
 import { RequestContextModule } from './common/request-context/request-context.module';
 import { MailModule } from './common/mail/mail.module';
 import { TwoFAModule } from './api/auth-twofa/twofa.module';
-import { EmailOTPTokenService } from './api/email-otp-token/email-otp-token.service';
 import { EmailOtpTokenModule } from './api/email-otp-token/email-otp-token.module';
 import { RbacModule } from './api/auth-rbac/rbac.module';
+import { BullModule } from '@nestjs/bullmq';
 
 @Module({
   imports: [
+    BullModule.forRoot({
+      connection: {
+        host: 'localhost',
+        port: 6379,
+      },
+      defaultJobOptions: {
+        removeOnComplete: 100,
+        removeOnFail: 1000,
+        attempts: 3,
+      },
+    }),
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
@@ -49,14 +60,14 @@ import { RbacModule } from './api/auth-rbac/rbac.module';
     //common folder for isolated sys which is independent to actual logic but can help the core
     IdempotencyModule,
     RequestContextModule,
-    MailModule
+    MailModule,
   ],
   controllers: [AppController],
   providers: [
-  {
-    provide: APP_GUARD,
-    useClass: AdvancedRateLimitGuard,
-  },
+    {
+      provide: APP_GUARD,
+      useClass: AdvancedRateLimitGuard,
+    },
     AppService,
   ],
 })
