@@ -151,6 +151,38 @@ export class SessionRepository {
     });
   }
 
+  async deleteOldRevokedSessions(
+    retentionDays = 30,
+  ): Promise<Prisma.BatchPayload> {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+
+    return this.prisma.session.deleteMany({
+      where: {
+        isRevoked: true,
+        updatedAt: {
+          lt: cutoff,
+        },
+      },
+    });
+  }
+
+  async deleteExpired(): Promise<Prisma.BatchPayload> {
+    return this.prisma.session.deleteMany({
+      where: {
+        OR: [
+          {
+            expiresAt: {
+              lt: new Date(),
+            },
+          },
+          {
+            isRevoked: true,
+          },
+        ],
+      },
+    });
+  }
   // ---------- EXISTS ----------
   async existsActive(id: string): Promise<boolean> {
     const count = await this.prisma.session.count({

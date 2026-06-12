@@ -17,6 +17,7 @@ import { RolePermissionRepository } from '../role-permission.repository';
 import { UserRoleRepository } from '../user-role.repository';
 import { WebhookSubscriptionRepository } from '../webhook-subscription.repository';
 import { AuthTokenRepository } from '../auth-token.repository';
+import { RequestNonceRepository } from '../request-nonce.repository';
 
 @Injectable()
 export class RepositoryRegistry {
@@ -39,6 +40,8 @@ export class RepositoryRegistry {
 
     public readonly apiKey: ApiKeyRepository,
     public readonly webhookSubscription: WebhookSubscriptionRepository,
+
+    public readonly nonce: RequestNonceRepository
 
     // public readonly idempotencyKey: IdempotencyKeyRepository,
     // public readonly idempotencyKeyAnon: IdempotencyKeyAnonRepository,

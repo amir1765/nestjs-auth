@@ -19,6 +19,7 @@ import { RolePermissionRepository } from './role-permission.repository';
 import { UserRoleRepository } from './user-role.repository';
 import { WebhookSubscriptionRepository } from './webhook-subscription.repository';
 import { AuthTokenRepository } from './auth-token.repository';
+import { RequestNonceRepository } from './request-nonce.repository';
 
 @Global()
 @Module({
@@ -34,6 +35,7 @@ import { AuthTokenRepository } from './auth-token.repository';
     // IdempotencyKeyRepository,
     // IdempotencyKeyAnonRepository,
     JwtSecretVersionRepository,
+    RequestNonceRepository,
     LoginAttemptRepository,
     PermissionRepository,
     // RateLimitBucketRepository,
