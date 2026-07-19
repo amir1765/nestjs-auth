@@ -11,13 +11,13 @@ import { validatePassword } from '../../common/util/validate-password';
 import { RedisStorageRegistry } from '../../redis/redis-storage.registry';
 import { RepositoryRegistry } from '../../repositories/prisma/repository.registry';
 
-import { AuditService } from './audit.service';
 import { SecurityService } from './security.service';
 import { TokenService } from './token.service';
 import { LoginOutput } from '../../common/interface/auth/registerService';
 import { TwoFAService } from '../auth-twofa/twofa.service';
 import { PrismaService } from '../../repositories/prisma/prisma.service';
 import { EmailOTPTokenService } from '../email-otp-token/email-otp-token.service';
+import { AuditService } from '../audit/audit.service';
 
 type VerifyType = 'OTP' | 'TOTP';
 

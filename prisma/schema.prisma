@@ -288,7 +288,7 @@ model Device {
   sessions    Session[]
   auditLogs   AuditLog[]
 
-  @@unique([userId, fingerprint]) // ✅ Corrected: uniqueness per user
+  @@unique([userId, fingerprint])
   @@index([userId])
   @@index([fingerprint]) // Index for fast lookup by fingerprint
   @@map("devices")
@@ -379,7 +379,7 @@ model WebhookSubscription {
 //   expiresAt DateTime // TTL (e.g., 24h)
 //   createdAt DateTime @default(now())
 //
-//   @@unique([userId, key]) // ✅ Works correctly with non-null userId
+//   @@unique([userId, key]) // Works correctly with non-null userId
 //   @@index([expiresAt])
 //   @@map("idempotency_keys")
 // }
@@ -389,7 +389,7 @@ model WebhookSubscription {
 // // ------------------------------
 // model IdempotencyKeyAnon {
 //   id        String   @id @default(cuid())
-//   key       String   @unique // ✅ Global uniqueness for anonymous requests
+//   key       String   @unique //  Global uniqueness for anonymous requests
 //   operation String
 //   response  Json // stored successful response
 //   status    String   @default("pending")

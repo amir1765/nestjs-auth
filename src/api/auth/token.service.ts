@@ -6,9 +6,9 @@ import { Prisma } from '@prisma/client';
 import { RepositoryRegistry } from 'src/repositories/prisma/repository.registry';
 import { generateSecureToken, hashToken } from '../../common/crypto';
 import { ConfigService } from '@nestjs/config';
-import { AuditService } from './audit.service';
 import { RequestContextService } from '../../common/request-context/request-context.service';
 import { PrismaService } from 'src/repositories/prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class TokenService {

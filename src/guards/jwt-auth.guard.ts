@@ -9,8 +9,8 @@ import { Request } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { RepositoryRegistry } from 'src/repositories/prisma/repository.registry';
 import { RedisStorageRegistry } from 'src/redis/redis-storage.registry';
-import { AuditService } from '../api/auth/audit.service';
 import { RequestContextService } from '../common/request-context/request-context.service';
+import { AuditService } from '../api/audit/audit.service';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {

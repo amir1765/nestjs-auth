@@ -19,6 +19,7 @@ import { TwoFAModule } from './api/auth-twofa/twofa.module';
 import { EmailOtpTokenModule } from './api/email-otp-token/email-otp-token.module';
 import { RbacModule } from './api/auth-rbac/rbac.module';
 import { BullModule } from '@nestjs/bullmq';
+import { AuditModule } from './api/audit/audit.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { BullModule } from '@nestjs/bullmq';
     RbacModule,
     TwoFAModule,
     EmailOtpTokenModule,
+    AuditModule,
     //common folder for isolated sys which is independent to actual logic but can help the core
     IdempotencyModule,
     RequestContextModule,
