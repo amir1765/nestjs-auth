@@ -3,12 +3,12 @@ version: '3.9'
 services:
   postgres:
     image: postgres:latest
-    container_name: bytewallet-postgres
+    container_name: auth-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
-      POSTGRES_DB: bytewallet.io
+      POSTGRES_DB: auth
     ports:
       - "5432:5432"
     volumes:
@@ -21,7 +21,7 @@ services:
 
   redis:
     image: redis:latest
-    container_name: bytewallet-redis
+    container_name: auth-redis
     restart: unless-stopped
     command: >
       redis-server
@@ -42,14 +42,14 @@ services:
   # Optional: NestJS API service (uncomment when ready)
   # api:
   #   build: .
-  #   container_name: bytewallet-api
+  #   container_name: auth-api
   #   restart: unless-stopped
   #   ports:
   #     - "3001:3001"
   #   environment:
   #     NODE_ENV: development
   #     PORT: 3001
-  #     DATABASE_URL: postgresql://admin:admin@postgres:5432/bytewallet.io?schema=public
+  #     DATABASE_URL: postgresql://admin:admin@postgres:5432/auth?schema=public
   #     REDIS_URL: redis://redis:6379
   #     JWT_SECRET: ${JWT_SECRET}
   #     JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
